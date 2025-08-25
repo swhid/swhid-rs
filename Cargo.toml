@@ -13,6 +13,14 @@ sha1-checked = "0.10"
 hex = "0.4"
 clap = { version = "4.0", features = ["derive"] }
 
+[dependencies.git2]
+version = "0.18"
+optional = true
+
+[features]
+default = []
+git = ["git2"]
+
 [dev-dependencies]
 tempfile = "3.8"
 

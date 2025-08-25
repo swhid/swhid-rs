@@ -56,7 +56,7 @@ The library also supports **Qualified SWHIDs** with qualifiers according to the 
 ## What's NOT Included
 
 - Archive processing (tar, zip, etc.)
-- Git repository operations (snapshot, revision, release computation)
+- Git repository operations (snapshot, revision, release computation) - **Available via CLI features**
 - Extended SWHID types (Origin, Raw Extrinsic Metadata) - these are NOT part of the core spec
 - Performance optimizations (caching, statistics)
 - Complex recursive traversal
@@ -71,6 +71,7 @@ The library also supports **Qualified SWHIDs** with qualifiers according to the 
 - **Exclude patterns** for directory traversal
 - **SWHID verification** functionality
 - **Stdin support** for content processing
+- **Git support** via conditional compilation (CLI features)
 
 ## Installation
 
@@ -80,7 +81,12 @@ The library also supports **Qualified SWHIDs** with qualifiers according to the 
 git clone <repository-url>
 cd swhid-rs
 git checkout minimal-reference-impl
+
+# Build minimal version
 cargo build
+
+# Build with Git support
+cargo build --features git
 ```
 
 ### Using Cargo
@@ -89,6 +95,29 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 swhid-lib = "0.1.0"
+
+# For Git support in CLI
+swhid-lib = { version = "0.1.0", features = ["git"] }
+```
+
+## Features
+
+Rust features allow conditional compilation of additional functionality:
+
+- **Default**: Minimal SWHID functionality
+- **`git`**: Enable Git support in CLI (revision, release, snapshot SWHIDs)
+
+### Building with Features
+
+```bash
+# Minimal build (default)
+cargo build
+
+# With Git support
+cargo build --features git
+
+# CLI with Git support
+cargo build --bin swhid-cli --features git
 ```
 
 ## Usage
@@ -98,9 +127,16 @@ swhid-lib = "0.1.0"
 The library includes a CLI tool for easy SWHID computation:
 
 ```bash
-# Build the CLI
+# Build the CLI (minimal version)
 cargo build --bin swhid-cli
 
+# Build the CLI with Git support
+cargo build --bin swhid-cli --features git
+```
+
+#### Basic Usage
+
+```bash
 # Compute SWHID for a file
 ./target/debug/swhid-cli file.txt
 
@@ -120,8 +156,24 @@ echo "Hello, World!" | ./target/debug/swhid-cli -
 ./target/debug/swhid-cli --help
 ```
 
+#### Git Support (Feature Flag)
+
+When built with `--features git`, the CLI supports Git-based SWHIDs:
+
+```bash
+# Compute revision SWHID for a specific commit
+./target/debug/swhid-cli --revision HEAD repository/
+
+# Compute release SWHID for a specific tag
+./target/debug/swhid-cli --release v1.0.0 repository/
+
+# Compute snapshot SWHID for entire repository
+./target/debug/swhid-cli --snapshot repository/
+```
+
 #### CLI Options
 
+**Basic Options:**
 - `-o, --obj-type <TYPE>`: Object type (auto, content, directory) [default: auto]
 - `--dereference`: Follow symlinks (default: follow)
 - `--no-dereference`: Don't follow symlinks
@@ -129,6 +181,11 @@ echo "Hello, World!" | ./target/debug/swhid-cli -
 - `-e, --exclude <PATTERN>`: Exclude directories using glob patterns
 - `-v, --verify <SWHID>`: Reference identifier to compare with computed one
 - `-h, --help`: Print help information
+
+**Git Options (requires `--features git`):**
+- `--revision <REVISION>`: Git revision to compute SWHID for
+- `--release <RELEASE>`: Git release/tag to compute SWHID for
+- `--snapshot`: Compute Git snapshot SWHID
 
 ### Library Usage
 
