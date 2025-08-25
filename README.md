@@ -29,9 +29,25 @@ According to the official SWHID specification:
 - **`rel`** - **Release**: Git releases and tags
 - **`snp`** - **Snapshot**: Git snapshots and repository states
 
+### Qualified SWHIDs
+
+The library also supports **Qualified SWHIDs** with qualifiers according to the specification:
+
+- **`origin`** - Software origin URI where the object was found
+- **`visit`** - Snapshot SWHID corresponding to a specific repository visit
+- **`anchor`** - Reference node (dir, rev, rel, or snp) for path resolution
+- **`path`** - Absolute file path relative to the anchor
+- **`lines`** - Line range (start-end or single line) within content
+- **`bytes`** - Byte range (start-end or single byte) within content
+
+**Format**: `swh:1:<object_type>:<hash>[;qualifier=value]*`
+
+**Example**: `swh:1:cnt:abc123...;origin=https://github.com/user/repo;path=/src/main.rs;lines=10-20;bytes=5-10`
+
 ## Features
 
 - **Complete Core SWHID Support**: All 5 core object types from the specification
+- **Qualified SWHID Support**: Full qualifier support (origin, visit, anchor, path, lines, bytes)
 - **Git-compatible**: Uses Git's object format for hashing
 - **Minimal Dependencies**: Only essential crates (sha1-checked, hex)
 - **Reference Implementation**: Clean, readable code for SWHID specification
@@ -42,7 +58,6 @@ According to the official SWHID specification:
 - Archive processing (tar, zip, etc.)
 - Git repository operations (snapshot, revision, release computation)
 - Extended SWHID types (Origin, Raw Extrinsic Metadata) - these are NOT part of the core spec
-- Qualified SWHIDs with anchors, paths, and line ranges
 - Performance optimizations (caching, statistics)
 - Command-line interface
 - Complex recursive traversal
@@ -92,6 +107,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### Qualified SWHID Usage
+
+```rust
+use swhid::{Swhid, ObjectType, QualifiedSwhid};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create a core SWHID
+    let hash = [0u8; 20];
+    let core_swhid = Swhid::new(ObjectType::Content, hash);
+    
+    // Create a qualified SWHID with qualifiers
+    let qualified = QualifiedSwhid::new(core_swhid)
+        .with_origin("https://github.com/user/repo".to_string())
+        .with_path(b"/src/main.rs".to_vec())
+        .with_lines(10, Some(20))
+        .with_bytes(5, Some(10));
+    
+    println!("Qualified SWHID: {}", qualified);
+    
+    // Parse a qualified SWHID from string
+    let parsed = QualifiedSwhid::from_string(
+        "swh:1:cnt:0000000000000000000000000000000000000000;origin=https://github.com/user/repo;path=/src/main.rs;lines=10-20;bytes=5-10"
+    )?;
+    
+    println!("Origin: {:?}", parsed.origin());
+    println!("Path: {:?}", parsed.path().map(|p| String::from_utf8_lossy(p)));
+    println!("Lines: {:?}", parsed.lines());
+    println!("Bytes: {:?}", parsed.bytes());
+    
+    Ok(())
+}
+```
+
 ### Direct Object Usage
 
 ```rust
@@ -123,7 +171,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 src/
 ├── lib.rs          # library exports
-├── swhid.rs        # Core SWHID types and formatting (all 5 object types)
+├── swhid.rs        # Core SWHID types, QualifiedSWHID, and formatting
 ├── hash.rs         # Basic hash computation
 ├── content.rs      # Content object handling
 ├── directory.rs    # Directory object handling
@@ -164,10 +212,13 @@ cargo test
 This implementation follows the **official SWHID specification v1.2** exactly:
 
 - ✅ **Core Object Types**: All 5 types (cnt, dir, rev, rel, snp)
-- ✅ **Format**: `swh:1:<object_type>:<40_character_hex_hash>`
+- ✅ **Qualified SWHIDs**: Full qualifier support (origin, visit, anchor, path, lines, bytes)
+- ✅ **Format**: `swh:1:<object_type>:<40_character_hex_hash>[;qualifier=value]*`
 - ✅ **Hash Algorithm**: SHA1 (Git-compatible)
 - ✅ **Namespace**: Always "swh"
 - ✅ **Version**: Always "1"
+- ✅ **Qualifier Validation**: Proper type checking for visit/anchor qualifiers
+- ✅ **Fragment Qualifiers**: Both lines and bytes qualifiers supported
 
 **Note**: Extended types like `ori` (origin) and `emd` (metadata) are **NOT part of the core specification** and are not included in this reference implementation.
 
