@@ -59,8 +59,18 @@ The library also supports **Qualified SWHIDs** with qualifiers according to the 
 - Git repository operations (snapshot, revision, release computation)
 - Extended SWHID types (Origin, Raw Extrinsic Metadata) - these are NOT part of the core spec
 - Performance optimizations (caching, statistics)
-- Command-line interface
 - Complex recursive traversal
+- Recursive directory printing
+
+## What's Included
+
+- **Core SWHID computation** for all 5 object types
+- **Qualified SWHID support** with all 6 qualifiers
+- **Command-line interface** for easy SWHID computation
+- **File and directory processing** with symlink support
+- **Exclude patterns** for directory traversal
+- **SWHID verification** functionality
+- **Stdin support** for content processing
 
 ## Installation
 
@@ -83,7 +93,44 @@ swhid-lib = "0.1.0"
 
 ## Usage
 
-### Basic SWHID Computation
+### Command-Line Interface
+
+The library includes a CLI tool for easy SWHID computation:
+
+```bash
+# Build the CLI
+cargo build --bin swhid-cli
+
+# Compute SWHID for a file
+./target/debug/swhid-cli file.txt
+
+# Compute SWHID for a directory
+./target/debug/swhid-cli directory/
+
+# Compute SWHID from stdin
+echo "Hello, World!" | ./target/debug/swhid-cli -
+
+# Verify a SWHID
+./target/debug/swhid-cli -v "swh:1:cnt:abc123..." file.txt
+
+# Exclude certain files from directory processing
+./target/debug/swhid-cli -e "*.tmp" -e "*.log" directory/
+
+# Get help
+./target/debug/swhid-cli --help
+```
+
+#### CLI Options
+
+- `-o, --obj-type <TYPE>`: Object type (auto, content, directory) [default: auto]
+- `--dereference`: Follow symlinks (default: follow)
+- `--no-dereference`: Don't follow symlinks
+- `--filename`: Show filename in output [default: true]
+- `-e, --exclude <PATTERN>`: Exclude directories using glob patterns
+- `-v, --verify <SWHID>`: Reference identifier to compare with computed one
+- `-h, --help`: Print help information
+
+### Library Usage
 
 ```rust
 use swhid::{SwhidComputer, Swhid, ObjectType};
@@ -176,7 +223,11 @@ src/
 ├── content.rs      # Content object handling
 ├── directory.rs    # Directory object handling
 ├── error.rs        # error types
-└── computer.rs     # Minimal SWHIDComputer
+├── computer.rs     # Minimal SWHIDComputer
+└── main.rs         # CLI interface
+
+Binaries:
+├── swhid-cli       # Command-line interface for SWHID computation
 ```
 
 ## Testing

@@ -5,15 +5,20 @@ edition = "2021"
 description = "Minimal reference implementation of Software Hash Identifier (SWHID) computation"
 license = "MIT"
 repository = "https://github.com/your-username/swhid-rs"
-keywords = ["swhid", "software-heritage", "hash", "identifier", "reference"]
+keywords = ["swhid", "software-hash", "hash", "identifier", "reference"]
 categories = ["data-structures", "encoding"]
 
 [dependencies]
 sha1-checked = "0.10"
 hex = "0.4"
+clap = { version = "4.0", features = ["derive"] }
 
 [dev-dependencies]
 tempfile = "3.8"
+
+[[bin]]
+name = "swhid-cli"
+path = "src/main.rs"
 
 [lib]
 name = "swhid"
