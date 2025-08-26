@@ -150,14 +150,15 @@ fn identify_object(
         if snapshot {
             return git_support::compute_git_snapshot_swhid(obj);
         }
-	#[cfg(feature = "git")]
-	if let Some(rev) = revision {
-	    return git_support::compute_git_revision_swhid(obj, rev);
-	}
-	#[cfg(feature = "git")]
-	if let Some(rel) = release {
-	    return git_support::compute_git_release_swhid(obj, rel);
-	}
+        #[cfg(feature = "git")]
+        if let Some(rev) = revision {
+            return git_support::compute_git_revision_swhid(obj, rev);
+        }
+        #[cfg(feature = "git")]
+        if let Some(rel) = release {
+            return git_support::compute_git_release_swhid(obj, rel);
+        }
+        
         // Fall back to auto-detection
         if obj == "-" {
             "content"

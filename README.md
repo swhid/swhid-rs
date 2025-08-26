@@ -295,7 +295,47 @@ src/
 
 Binaries:
 ├── swhid-cli       # Command-line interface for SWHID computation
+
+Benchmarks:
+├── benches/        # Performance benchmarks using Criterion
 ```
+
+## Performance Benchmarks
+
+This implementation includes comprehensive performance benchmarks using Criterion. The benchmarks measure:
+
+- **Content Creation**: Small (16B), medium (1KB), and large (100KB) content processing
+- **Hash Functions**: SHA1, Git-style SHA1, and Git object hashing
+- **SWHID Parsing**: Basic and qualified SWHID parsing performance
+- **SWHID Computation**: Content and file SWHID generation
+- **Directory Processing**: Multi-file directory structure processing
+- **Symlink Handling**: Default and dereferenced symlink processing
+- **Verification**: SWHID matching and mismatch verification
+
+### Running Benchmarks
+
+```bash
+# Run all benchmarks (takes several minutes)
+cargo bench
+
+# Run benchmarks with quick sampling (faster, less precise)
+cargo bench -- --quick
+
+# Run specific benchmark group
+cargo bench --bench benchmarks content_creation
+
+# Generate HTML reports (requires gnuplot)
+cargo bench -- --html
+```
+
+### Sample Benchmark Results
+
+Recent benchmark results show:
+- **Content creation**: 16B content in ~174ns, 1KB in ~2µs, 100KB in ~169µs
+- **Hash computation**: SHA1 hashing of 1KB data in ~1.9µs
+- **SWHID parsing**: Basic SWHID in ~149ns, qualified in ~354ns
+- **Directory processing**: 15 files in ~56µs
+- **Symlink handling**: Default in ~1.1µs, dereferenced in ~4.4µs
 
 ## Testing
 
