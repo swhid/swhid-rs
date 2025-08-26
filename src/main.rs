@@ -11,11 +11,11 @@ struct Cli {
     #[arg(short, long, default_value = "auto")]
     obj_type: String,
 
-    /// Follow symlinks (default: follow)
-    #[arg(long, default_value = "true")]
+    /// Follow symlinks (violates SWHID specification)
+    #[arg(long, default_value = "false")]
     dereference: bool,
 
-    /// Don't follow symlinks
+    /// Don't follow symlinks (default: compliant with SWHID specification)
     #[arg(long, conflicts_with = "dereference")]
     no_dereference: bool,
 
@@ -176,7 +176,7 @@ fn identify_object(
                 let swhid = computer.compute_content_swhid(&content)?;
                 Ok(swhid.to_string())
             } else {
-                let swhid = computer.compute_file_swhid(obj)?;
+                let swhid = computer.compute_swhid(obj)?;
                 Ok(swhid.to_string())
             }
         }
@@ -211,7 +211,7 @@ fn identify_object(
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    let follow_symlinks = !cli.no_dereference;
+    let follow_symlinks = cli.dereference;
 
     for obj in &cli.objects {
         let result = identify_object(

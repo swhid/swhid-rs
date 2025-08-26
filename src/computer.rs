@@ -43,7 +43,7 @@ impl SwhidComputer {
 
     /// Compute SWHID for a directory
     pub fn compute_directory_swhid<P: AsRef<Path>>(&self, path: P) -> Result<Swhid, SwhidError> {
-        let mut dir = Directory::from_disk(path, &self.exclude_patterns, self.follow_symlinks)?;
+        let mut dir = Directory::from_disk(path, &self.exclude_patterns)?;
         Ok(dir.swhid())
     }
 

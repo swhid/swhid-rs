@@ -4,7 +4,7 @@ A minimal, clean reference implementation of Software Hash Identifier (SWHID) co
 
 ## Overview
 
-This library provides the **SWHID functionality** according to the official SWHID specification v1.2, without extra features like archive processing, complex Git operations, or performance optimizations. It serves as a clean reference implementation that can be used as a dependency for the full-featured `swhid-rs` library.
+This library provides the **SWHID functionality** according to the official SWHID specification v1.2. It serves as a clean reference implementation that can be used as a dependency for full-featured toos. A minimal CLI interface is provided as `swhid-rs`, as well as a test harness to compare with other implementations: these components are for your convenience and are not part of the reference implementation.
 
 ## Core SWHID Types
 
@@ -48,30 +48,32 @@ The library also supports **Qualified SWHIDs** with qualifiers according to the 
 
 - **Complete Core SWHID Support**: All 5 core object types from the specification
 - **Qualified SWHID Support**: Full qualifier support (origin, visit, anchor, path, lines, bytes)
-- **Git-compatible**: Uses Git's object format for hashing
 - **Minimal Dependencies**: Only essential crates (sha1-checked, hex)
 - **Reference Implementation**: Clean, readable code for SWHID specification
 - **Specification Compliant**: Follows SWHID v1.2 specification exactly
 
-## What's NOT Included
-
-- Archive processing (tar, zip, etc.)
-- Git repository operations (snapshot, revision, release computation) - **Available via CLI features**
-- Extended SWHID types (Origin, Raw Extrinsic Metadata) - these are NOT part of the core spec
-- Performance optimizations (caching, statistics)
-- Complex recursive traversal
-- Recursive directory printing
-
 ## What's Included
 
+In the core library
 - **Core SWHID computation** for all 5 object types
 - **Qualified SWHID support** with all 6 qualifiers
-- **Command-line interface** for easy SWHID computation
-- **File and directory processing** with symlink support
+
+In the CLI as a default
+- **File and directory processing** with file attributes and symlink support (specification-compliant)
 - **Exclude patterns** for directory traversal
 - **SWHID verification** functionality
 - **Stdin support** for content processing
-- **Git support** via conditional compilation (CLI features)
+
+In the cli via conditional compilation (CLI features)
+- **Git support** to compute SWHID on git repositories (snapshot, revision, release computation)
+
+## What's NOT Included
+
+The CLI is provided as a minimal interface to the library, and it does not feature functionality that you may find in other tools, like:
+
+- Archive processing (tar, zip, etc.)
+- Recursive directory printing
+- Performance optimizations (caching, statistics)
 
 ## Installation
 
@@ -175,8 +177,8 @@ When built with `--features git`, the CLI supports Git-based SWHIDs:
 
 **Basic Options:**
 - `-o, --obj-type <TYPE>`: Object type (auto, content, directory) [default: auto]
-- `--dereference`: Follow symlinks (default: follow)
-- `--no-dereference`: Don't follow symlinks
+- `--dereference`: If the CLI is called on a symlink, follow it
+- `--no-dereference`: If the CLI is called on a symlink, don't follow it
 - `--filename`: Show filename in output [default: true]
 - `-e, --exclude <PATTERN>`: Exclude directories using glob patterns
 - `-v, --verify <SWHID>`: Reference identifier to compare with computed one
@@ -186,6 +188,14 @@ When built with `--features git`, the CLI supports Git-based SWHIDs:
 - `--revision <REVISION>`: Git revision to compute SWHID for
 - `--release <RELEASE>`: Git release/tag to compute SWHID for
 - `--snapshot`: Compute Git snapshot SWHID
+
+### Symlink Handling and Specification Compliance
+
+**Important**: The official SWHID specification v1.2 states that symlinks are treated as content objects where the "content" is the symlink target string itself, and this reference implementation strictly obeys that rule.
+
+The CLI has a `--dereference` option, disabled by default, that comes handy if you want to compute the SWHID of the target of the symlink passed on the command line. This option only affects symlinks passed directly as arguments, not symlinks discovered during directory traversal, so the SWHID returned is the correct SWHID **for the symlink target**.
+
+
 
 ### Library Usage
 
@@ -322,13 +332,12 @@ This implementation follows the **official SWHID specification v1.2** exactly:
 - ✅ **Core Object Types**: All 5 types (cnt, dir, rev, rel, snp)
 - ✅ **Qualified SWHIDs**: Full qualifier support (origin, visit, anchor, path, lines, bytes)
 - ✅ **Format**: `swh:1:<object_type>:<40_character_hex_hash>[;qualifier=value]*`
-- ✅ **Hash Algorithm**: SHA1 (Git-compatible)
+- ✅ **Hash Algorithm**: SHA1 (Git-compatible) with collision detection
 - ✅ **Namespace**: Always "swh"
 - ✅ **Version**: Always "1"
 - ✅ **Qualifier Validation**: Proper type checking for visit/anchor qualifiers
 - ✅ **Fragment Qualifiers**: Both lines and bytes qualifiers supported
-
-**Note**: Extended types like `ori` (origin) and `emd` (metadata) are **NOT part of the core specification** and are not included in this reference implementation.
+- ✅ **Symlink Handling**: Never follows symlinks by default (specification-compliant)
 
 ## License
 

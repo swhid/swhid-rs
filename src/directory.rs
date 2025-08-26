@@ -96,7 +96,6 @@ impl Directory {
     pub fn from_disk<P: AsRef<Path>>(
         path: P,
         exclude_patterns: &[String],
-        follow_symlinks: bool,
     ) -> Result<Self, SwhidError> {
         let path = path.as_ref();
         let mut entries = Vec::new();
@@ -119,11 +118,7 @@ impl Directory {
                 continue;
             }
 
-            let metadata = if follow_symlinks {
-                entry.metadata()?
-            } else {
-                entry.metadata()?
-            };
+            let metadata = entry.metadata()?;
 
             let entry_type = if metadata.is_dir() {
                 EntryType::Directory
@@ -165,7 +160,7 @@ impl Directory {
         for entry in &mut entries {
             if entry.entry_type == EntryType::Directory {
                 let child_path = path.join(std::ffi::OsStr::from_bytes(&entry.name));
-                let mut child_dir = Directory::from_disk(child_path, exclude_patterns, follow_symlinks)?;
+                let mut child_dir = Directory::from_disk(child_path, exclude_patterns)?;
                 entry.target = child_dir.compute_hash();
             }
         }
@@ -264,7 +259,7 @@ mod tests {
         fs::create_dir(&sub_dir).unwrap();
         fs::write(sub_dir.join("file.txt"), b"test").unwrap();
 
-        let dir = Directory::from_disk(temp_dir.path(), &[], true).unwrap();
+        let dir = Directory::from_disk(temp_dir.path(), &[]).unwrap();
         assert_eq!(dir.entries().len(), 1);
         assert_eq!(dir.entries()[0].entry_type, EntryType::Directory);
     }
@@ -274,7 +269,7 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         fs::write(temp_dir.path().join("file.txt"), b"test").unwrap();
 
-        let mut dir = Directory::from_disk(temp_dir.path(), &[], true).unwrap();
+        let mut dir = Directory::from_disk(temp_dir.path(), &[]).unwrap();
         let swhid = dir.swhid();
         
         assert_eq!(swhid.object_type(), ObjectType::Directory);

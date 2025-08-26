@@ -23,7 +23,7 @@ fn test_directory_swhid_conformance() {
     let temp_dir = TempDir::new().unwrap();
     fs::write(temp_dir.path().join("file.txt"), b"test content").unwrap();
 
-    let mut dir = Directory::from_disk(temp_dir.path(), &[], true).unwrap();
+    let mut dir = Directory::from_disk(temp_dir.path(), &[]).unwrap();
     let swhid = dir.swhid();
 
     assert_eq!(swhid.object_type(), ObjectType::Directory);
