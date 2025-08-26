@@ -88,3 +88,140 @@ impl SwhidComputer {
         Ok(expected == actual)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use std::fs;
+    use crate::swhid::ObjectType;
+
+    #[test]
+    fn test_swhid_computer_new() {
+        let computer = SwhidComputer::new();
+        assert_eq!(computer.follow_symlinks, false);
+        assert!(computer.exclude_patterns.is_empty());
+    }
+
+    #[test]
+    fn test_swhid_computer_with_follow_symlinks() {
+        let computer = SwhidComputer::new().with_follow_symlinks(true);
+        assert_eq!(computer.follow_symlinks, true);
+    }
+
+    #[test]
+    fn test_swhid_computer_with_exclude_patterns() {
+        let patterns = vec!["*.tmp".to_string(), "*.log".to_string()];
+        let computer = SwhidComputer::new().with_exclude_patterns(&patterns);
+        assert_eq!(computer.exclude_patterns, patterns);
+    }
+
+    #[test]
+    fn test_swhid_computer_compute_content_swhid() {
+        let computer = SwhidComputer::new();
+        let content = b"test content";
+        let swhid = computer.compute_content_swhid(content).unwrap();
+        
+        assert_eq!(swhid.object_type(), ObjectType::Content);
+        assert_eq!(swhid.hash().len(), 20);
+    }
+
+    #[test]
+    fn test_swhid_computer_compute_file_swhid() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        fs::write(&file_path, b"test content").unwrap();
+
+        let computer = SwhidComputer::new();
+        let swhid = computer.compute_file_swhid(&file_path).unwrap();
+        
+        assert_eq!(swhid.object_type(), ObjectType::Content);
+        assert_eq!(swhid.hash().len(), 20);
+    }
+
+    #[test]
+    fn test_swhid_computer_compute_directory_swhid() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        fs::write(&file_path, b"test content").unwrap();
+
+        let computer = SwhidComputer::new();
+        let swhid = computer.compute_directory_swhid(temp_dir.path()).unwrap();
+        
+        assert_eq!(swhid.object_type(), ObjectType::Directory);
+        assert_eq!(swhid.hash().len(), 20);
+    }
+
+    #[test]
+    fn test_swhid_computer_auto_detect_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        fs::write(&file_path, b"test content").unwrap();
+
+        let computer = SwhidComputer::new();
+        let swhid = computer.compute_swhid(&file_path).unwrap();
+        
+        assert_eq!(swhid.object_type(), ObjectType::Content);
+        assert_eq!(swhid.hash().len(), 20);
+    }
+
+    #[test]
+    fn test_swhid_computer_auto_detect_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        fs::write(&file_path, b"test content").unwrap();
+
+        let computer = SwhidComputer::new();
+        let swhid = computer.compute_swhid(temp_dir.path()).unwrap();
+        
+        assert_eq!(swhid.object_type(), ObjectType::Directory);
+        assert_eq!(swhid.hash().len(), 20);
+    }
+
+    #[test]
+    fn test_swhid_computer_symlink_handling() {
+        let temp_dir = TempDir::new().unwrap();
+        let target_path = temp_dir.path().join("target.txt");
+        fs::write(&target_path, b"target content").unwrap();
+        
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            let link_path = temp_dir.path().join("link.txt");
+            symlink("target.txt", &link_path).unwrap();
+
+            let computer = SwhidComputer::new();
+            let swhid = computer.compute_swhid(&link_path).unwrap();
+            
+            // Should hash the symlink target string by default
+            assert_eq!(swhid.object_type(), ObjectType::Content);
+            assert_eq!(swhid.hash().len(), 20);
+        }
+    }
+
+    #[test]
+    fn test_swhid_computer_verification() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        fs::write(&file_path, b"test content").unwrap();
+
+        let computer = SwhidComputer::new();
+        let swhid = computer.compute_file_swhid(&file_path).unwrap();
+        
+        let is_valid = computer.verify_swhid(&file_path, &swhid.to_string()).unwrap();
+        assert!(is_valid);
+    }
+
+    #[test]
+    fn test_swhid_computer_verification_mismatch() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        fs::write(&file_path, b"test content").unwrap();
+
+        let computer = SwhidComputer::new();
+        let wrong_swhid = "swh:1:cnt:0000000000000000000000000000000000000000";
+        
+        let is_valid = computer.verify_swhid(&file_path, wrong_swhid).unwrap();
+        assert!(!is_valid);
+    }
+}

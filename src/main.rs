@@ -145,6 +145,20 @@ fn identify_object(
         .with_exclude_patterns(exclude_patterns);
 
     let obj_type = if obj_type == "auto" {
+        // Check Git flags first
+        #[cfg(feature = "git")]
+        if snapshot {
+            return git_support::compute_git_snapshot_swhid(obj);
+        }
+	#[cfg(feature = "git")]
+	if let Some(rev) = revision {
+	    return git_support::compute_git_revision_swhid(obj, rev);
+	}
+	#[cfg(feature = "git")]
+	if let Some(rel) = release {
+	    return git_support::compute_git_release_swhid(obj, rel);
+	}
+        // Fall back to auto-detection
         if obj == "-" {
             "content"
         } else if Path::new(obj).is_file() {
@@ -153,10 +167,6 @@ fn identify_object(
             // Check if it's a Git repository
             let git_path = Path::new(obj).join(".git");
             if git_path.exists() && git_path.is_dir() {
-                #[cfg(feature = "git")]
-                if snapshot {
-                    return git_support::compute_git_snapshot_swhid(obj);
-                }
                 "directory"
             } else {
                 "directory"

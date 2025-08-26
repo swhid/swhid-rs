@@ -50,9 +50,33 @@ mod tests {
     }
 
     #[test]
+    fn test_sha1_git_hash_known_values() {
+        // Test known Git hash values
+        let empty_data = b"";
+        let empty_hash = sha1_git_hash(empty_data);
+        
+        // Known hash for empty content (Git blob)
+        let expected_empty: [u8; 20] = hex::decode("e69de29bb2d1d6434b8b29ae775ad8c2e48c5391").unwrap().try_into().unwrap();
+        assert_eq!(empty_hash, expected_empty);
+        
+        let hello_data = b"Hello, World!";
+        let hello_hash = sha1_git_hash(hello_data);
+        
+        // Known hash for "Hello, World!" (Git blob)
+        let expected_hello: [u8; 20] = hex::decode("b45ef6fec89518d314f546fd6c3025367b721684").unwrap().try_into().unwrap();
+        assert_eq!(hello_hash, expected_hello);
+    }
+
+    #[test]
     fn test_git_object_header() {
         let header = git_object_header("blob", 1234);
         assert_eq!(header, b"blob 1234\0");
+        
+        let header = git_object_header("tree", 0);
+        assert_eq!(header, b"tree 0\0");
+        
+        let header = git_object_header("commit", 567);
+        assert_eq!(header, b"commit 567\0");
     }
 
     #[test]
@@ -64,4 +88,29 @@ mod tests {
         let expected = sha1_git_hash(data);
         assert_eq!(hash, expected);
     }
+
+    #[test]
+    fn test_hash_git_object_different_types() {
+        let data = b"test data";
+        let blob_hash = hash_git_object("blob", data);
+        let tree_hash = hash_git_object("tree", data);
+        
+        // Different Git object types should produce different hashes
+        assert_ne!(blob_hash, tree_hash);
+    }
+
+    #[test]
+    fn test_sha1_hash() {
+        let data = b"test data";
+        let hash = sha1_hash(data);
+        
+        // Should be 20 bytes
+        assert_eq!(hash.len(), 20);
+        
+        // Should be deterministic
+        let hash2 = sha1_hash(data);
+        assert_eq!(hash, hash2);
+    }
+
+
 } 

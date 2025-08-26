@@ -230,12 +230,35 @@ impl Directory {
 /// Uses shell pattern matching like Python's fnmatch
 fn should_exclude_str(name: &str, patterns: &[String]) -> bool {
     for pattern in patterns {
-        // Simple shell pattern matching - for now just exact match
-        // TODO: Implement full shell pattern matching like Python's fnmatch
-        if name == pattern {
+        if matches_pattern(name, pattern) {
             return true;
         }
     }
+    false
+}
+
+/// Simple shell pattern matching for common patterns
+fn matches_pattern(name: &str, pattern: &str) -> bool {
+    // Exact match
+    if name == pattern {
+        return true;
+    }
+    
+    // Handle basic wildcard patterns
+    if pattern.starts_with('*') && pattern.ends_with('*') {
+        // *pattern*
+        let inner = &pattern[1..pattern.len()-1];
+        return name.contains(inner);
+    } else if pattern.starts_with('*') {
+        // *pattern
+        let suffix = &pattern[1..];
+        return name.ends_with(suffix);
+    } else if pattern.ends_with('*') {
+        // pattern*
+        let prefix = &pattern[..pattern.len()-1];
+        return name.starts_with(prefix);
+    }
+    
     false
 }
 
@@ -274,5 +297,87 @@ mod tests {
         
         assert_eq!(swhid.object_type(), ObjectType::Directory);
         assert_eq!(swhid.hash().len(), 20);
+    }
+
+    #[test]
+    fn test_directory_entries_sorting() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        // Create files in reverse order to test sorting
+        fs::write(temp_dir.path().join("z.txt"), b"z content").unwrap();
+        fs::write(temp_dir.path().join("a.txt"), b"a content").unwrap();
+        fs::write(temp_dir.path().join("m.txt"), b"m content").unwrap();
+        
+        let dir = Directory::from_disk(temp_dir.path(), &[]).unwrap();
+        let entries = dir.entries();
+        
+        // Should be sorted alphabetically
+        assert_eq!(entries[0].name, b"a.txt");
+        assert_eq!(entries[1].name, b"m.txt");
+        assert_eq!(entries[2].name, b"z.txt");
+    }
+
+    #[test]
+    fn test_directory_with_symlinks() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("target.txt"), b"target content").unwrap();
+        
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::symlink;
+            symlink("target.txt", temp_dir.path().join("link.txt")).unwrap();
+        }
+        
+        let dir = Directory::from_disk(temp_dir.path(), &[]).unwrap();
+        let entries = dir.entries();
+        
+        // Should have both file and symlink
+        assert_eq!(entries.len(), 2);
+        
+        let symlink_entry = entries.iter().find(|e| e.entry_type == EntryType::Symlink).unwrap();
+        assert_eq!(symlink_entry.permissions, Permissions::Symlink);
+    }
+
+    #[test]
+    fn test_directory_exclude_patterns() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("include.txt"), b"include content").unwrap();
+        fs::write(temp_dir.path().join("exclude.tmp"), b"exclude content").unwrap();
+        
+        let dir = Directory::from_disk(temp_dir.path(), &["*.tmp".to_string()]).unwrap();
+        let entries = dir.entries();
+        
+        // Should only have include.txt
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, b"include.txt");
+    }
+
+    #[test]
+    fn test_directory_permissions() {
+        let temp_dir = TempDir::new().unwrap();
+        fs::write(temp_dir.path().join("normal.txt"), b"normal content").unwrap();
+        
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let file_path = temp_dir.path().join("executable.sh");
+            fs::write(&file_path, b"#!/bin/bash").unwrap();
+            let mut perms = fs::metadata(&file_path).unwrap().permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&file_path, perms).unwrap();
+        }
+        
+        let dir = Directory::from_disk(temp_dir.path(), &[]).unwrap();
+        let entries = dir.entries();
+        
+        // Should have correct permissions
+        let normal_entry = entries.iter().find(|e| e.name == b"normal.txt").unwrap();
+        assert_eq!(normal_entry.permissions, Permissions::File);
+        
+        #[cfg(unix)]
+        {
+            let exec_entry = entries.iter().find(|e| e.name == b"executable.sh").unwrap();
+            assert_eq!(exec_entry.permissions, Permissions::Executable);
+        }
     }
 } 
