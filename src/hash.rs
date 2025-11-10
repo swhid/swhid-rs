@@ -1,7 +1,7 @@
 use sha1collisiondetection::{Digest, Sha1CD};
 
 /// Build SWHID v1.2 object header bytes: `<type> <len>\0`
-/// 
+///
 /// This implements the object header format specified in SWHID v1.2,
 /// which is compatible with Git's object format for content and directory objects.
 pub fn swhid_object_header(typ: &str, len: usize) -> Vec<u8> {
@@ -14,7 +14,7 @@ pub fn swhid_object_header(typ: &str, len: usize) -> Vec<u8> {
 }
 
 /// Hash content data according to SWHID v1.2 specification.
-/// 
+///
 /// This computes the SHA-1 digest of content data using the SWHID v1.2
 /// object format, which is compatible with Git's blob format.
 pub fn hash_content(data: &[u8]) -> [u8; 20] {
@@ -26,7 +26,7 @@ pub fn hash_content(data: &[u8]) -> [u8; 20] {
 }
 
 /// Hash arbitrary SWHID v1.2 object given its type and payload bytes.
-/// 
+///
 /// This implements the SWHID v1.2 object hashing algorithm for any
 /// object type (blob, tree, commit, tag, snapshot).
 pub fn hash_swhid_object(typ: &str, payload: &[u8]) -> [u8; 20] {
@@ -74,7 +74,7 @@ mod tests {
     fn swhid_object_header_format() {
         let header = swhid_object_header("blob", 0);
         assert_eq!(header, b"blob 0\0");
-        
+
         let header = swhid_object_header("tree", 1234);
         assert_eq!(header, b"tree 1234\0");
     }
@@ -136,11 +136,11 @@ mod tests {
         let unix_data = b"line1\nline2\n";
         let windows_data = b"line1\r\nline2\r\n";
         let mac_data = b"line1\rline2\r";
-        
+
         let unix_hash = hash_content(unix_data);
         let windows_hash = hash_content(windows_data);
         let mac_hash = hash_content(mac_data);
-        
+
         assert_ne!(unix_hash, windows_hash);
         assert_ne!(unix_hash, mac_hash);
         assert_ne!(windows_hash, mac_hash);
@@ -159,7 +159,7 @@ mod tests {
         let empty_tree = hash_swhid_object("tree", &[]);
         let empty_commit = hash_swhid_object("commit", &[]);
         let empty_tag = hash_swhid_object("tag", &[]);
-        
+
         assert_ne!(empty_tree, empty_commit);
         assert_ne!(empty_tree, empty_tag);
         assert_ne!(empty_commit, empty_tag);
@@ -169,7 +169,7 @@ mod tests {
     fn hash_object_header_edge_cases() {
         let header_zero = swhid_object_header("blob", 0);
         assert_eq!(header_zero, b"blob 0\0");
-        
+
         let header_large = swhid_object_header("tree", 999999);
         assert_eq!(header_large, b"tree 999999\0");
     }
@@ -178,11 +178,11 @@ mod tests {
     fn hash_consistency_across_calls() {
         let data = b"consistency test data";
         let mut hashes = Vec::new();
-        
+
         for _ in 0..10 {
             hashes.push(hash_content(data));
         }
-        
+
         // All hashes should be identical
         for i in 1..hashes.len() {
             assert_eq!(hashes[0], hashes[i]);

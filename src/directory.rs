@@ -1,6 +1,7 @@
 use std::fs;
 use std::io;
-#[cfg(unix)] use std::os::unix::fs::PermissionsExt;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
 use crate::core::{ObjectType, Swhid};
@@ -23,13 +24,15 @@ pub struct Entry {
 }
 
 fn is_excluded(name: &[u8], opts: &WalkOptions) -> bool {
-    if opts.exclude_suffixes.is_empty() { return false; }
+    if opts.exclude_suffixes.is_empty() {
+        return false;
+    }
     let s = String::from_utf8_lossy(name);
     opts.exclude_suffixes.iter().any(|suf| s.ends_with(suf))
 }
 
 /// Compute the SWHID v1.2 directory payload (concatenation of entries).
-/// 
+///
 /// This implements the SWHID v1.2 directory tree format, which is compatible
 /// with Git's tree format for directory objects.
 fn dir_payload(mut children: Vec<Entry>) -> Vec<u8> {
@@ -53,17 +56,31 @@ fn path_file_mode(meta: &fs::Metadata) -> u32 {
     {
         let m = meta.permissions().mode();
         let exec = (m & 0o111) != 0;
-        if meta.is_dir()       { 0o040000 }
-        else if meta.is_file() { if exec { 0o100755 } else { 0o100644 }}
-        else { 0o100644}
+        if meta.is_dir() {
+            0o040000
+        } else if meta.is_file() {
+            if exec {
+                0o100755
+            } else {
+                0o100644
+            }
+        } else {
+            0o100644
+        }
     }
     #[cfg(not(unix))]
     {
-        if meta.is_dir()       { 0o040000 } else { 0o100644 }
+        if meta.is_dir() {
+            0o040000
+        } else {
+            0o100644
+        }
     }
 }
 
-fn symlink_mode() -> u32 { 0o120000 }
+fn symlink_mode() -> u32 {
+    0o120000
+}
 
 fn read_dir(path: &Path, opts: &WalkOptions) -> io::Result<Vec<Entry>> {
     let mut children: Vec<Entry> = Vec::new();
@@ -72,25 +89,43 @@ fn read_dir(path: &Path, opts: &WalkOptions) -> io::Result<Vec<Entry>> {
         let file_name = entry.file_name();
         let name_bytes = file_name.as_os_str().as_encoded_bytes().to_vec();
 
-        if is_excluded(&name_bytes, opts) { continue; }
+        if is_excluded(&name_bytes, opts) {
+            continue;
+        }
 
-        let md = if opts.follow_symlinks { fs::metadata(entry.path())? } else { fs::symlink_metadata(entry.path())? };
+        let md = if opts.follow_symlinks {
+            fs::metadata(entry.path())?
+        } else {
+            fs::symlink_metadata(entry.path())?
+        };
         let ft = md.file_type();
 
         if ft.is_dir() {
             let id = hash_swhid_object("tree", &dir_payload(read_dir(&entry.path(), opts)?));
-            children.push(Entry{ name: name_bytes, mode: 0o040000, id });
+            children.push(Entry {
+                name: name_bytes,
+                mode: 0o040000,
+                id,
+            });
         } else if ft.is_symlink() {
             // The content is the link target bytes
             let target = fs::read_link(entry.path())?;
             let bytes = target.as_os_str().as_encoded_bytes();
             let id = hash_content(bytes);
-            children.push(Entry{ name: name_bytes, mode: symlink_mode(), id });
+            children.push(Entry {
+                name: name_bytes,
+                mode: symlink_mode(),
+                id,
+            });
         } else if ft.is_file() {
             let bytes = fs::read(entry.path())?;
             let id = hash_content(&bytes);
             let mode = path_file_mode(&md);
-            children.push(Entry{ name: name_bytes, mode, id });
+            children.push(Entry {
+                name: name_bytes,
+                mode,
+                id,
+            });
         } else {
             // ignore special files
             continue;
@@ -100,12 +135,12 @@ fn read_dir(path: &Path, opts: &WalkOptions) -> io::Result<Vec<Entry>> {
 }
 
 /// SWHID v1.2 directory object for computing directory SWHIDs.
-/// 
+///
 /// This struct represents a directory tree and provides methods to compute
 /// SWHID v1.2 compliant directory identifiers according to the specification.
 #[derive(Debug, Clone)]
 pub struct Directory {
-    entries: Vec<Entry>
+    entries: Vec<Entry>,
 }
 
 impl Directory {
@@ -118,12 +153,15 @@ impl Directory {
     }
 
     /// Compute the SWHID v1.2 directory identifier for this directory.
-    /// 
+    ///
     /// This implements the SWHID v1.2 directory hashing algorithm, which
     /// is compatible with Git's tree format for directory objects.
     pub fn swhid(&self) -> Result<Swhid, crate::error::SwhidError> {
         let payload = dir_payload(self.entries.clone());
-        Ok(Swhid::new(ObjectType::Directory, hash_swhid_object("tree", &payload)))
+        Ok(Swhid::new(
+            ObjectType::Directory,
+            hash_swhid_object("tree", &payload),
+        ))
     }
 }
 
@@ -135,23 +173,32 @@ pub struct DiskDirectoryBuilder<'a> {
 
 impl<'a> DiskDirectoryBuilder<'a> {
     /// Create a new Directory object for the given path.
-    /// 
+    ///
     /// This implements SWHID v1.2 directory object creation for any directory.
-    pub fn new(root: &'a Path) -> Self { Self { root, opts: WalkOptions::default() } }
-    
+    pub fn new(root: &'a Path) -> Self {
+        Self {
+            root,
+            opts: WalkOptions::default(),
+        }
+    }
+
     /// Configure directory walking options.
-    pub fn with_options(mut self, opts: WalkOptions) -> Self { self.opts = opts; self }
+    pub fn with_options(mut self, opts: WalkOptions) -> Self {
+        self.opts = opts;
+        self
+    }
 
     pub fn build(self) -> Result<Directory, io::Error> {
         Ok(Directory::new(read_dir(self.root, &self.opts)?))
     }
 
     /// Compute the SWHID v1.2 directory identifier for this directory.
-    /// 
+    ///
     /// This implements the SWHID v1.2 directory hashing algorithm, which
     /// is compatible with Git's tree format for directory objects.
     pub fn swhid(&self) -> Result<Swhid, crate::error::SwhidError> {
-        let entries = read_dir(self.root, &self.opts).map_err(|e| crate::error::SwhidError::Io(e.to_string()))?;
+        let entries = read_dir(self.root, &self.opts)
+            .map_err(|e| crate::error::SwhidError::Io(e.to_string()))?;
         Directory::new(entries).swhid()
     }
 }
@@ -160,7 +207,6 @@ impl<'a> DiskDirectoryBuilder<'a> {
 mod tests {
     use super::*;
     use assert_fs::prelude::*;
-    
 
     #[test]
     fn simple_dir_hash() {
@@ -186,8 +232,10 @@ mod tests {
     #[test]
     fn single_file_dir() {
         let tmp = assert_fs::TempDir::new().unwrap();
-        tmp.child("single.txt").write_str("single file content").unwrap();
-        
+        tmp.child("single.txt")
+            .write_str("single file content")
+            .unwrap();
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);
@@ -200,7 +248,7 @@ mod tests {
         tmp.child("subdir").create_dir_all().unwrap();
         tmp.child("subdir/file2.txt").write_str("content2").unwrap();
         tmp.child("subdir/file3.txt").write_str("content3").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);
@@ -211,7 +259,7 @@ mod tests {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("target.txt").write_str("target content").unwrap();
         tmp.child("link.txt").symlink_to_file("target.txt").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);
@@ -223,10 +271,10 @@ mod tests {
         tmp.child("keep.txt").write_str("keep").unwrap();
         tmp.child("exclude.tmp").write_str("exclude").unwrap();
         tmp.child("also.tmp").write_str("also exclude").unwrap();
-        
+
         let mut opts = WalkOptions::default();
         opts.exclude_suffixes.push(".tmp".to_string());
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path()).with_options(opts);
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);
@@ -237,7 +285,7 @@ mod tests {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("a.txt").write_str("A").unwrap();
         tmp.child("b.txt").write_str("B").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id1 = dir.swhid().unwrap();
         let id2 = dir.swhid().unwrap();
@@ -248,13 +296,13 @@ mod tests {
     fn dir_different_content() {
         let tmp1 = assert_fs::TempDir::new().unwrap();
         tmp1.child("file.txt").write_str("content1").unwrap();
-        
+
         let tmp2 = assert_fs::TempDir::new().unwrap();
         tmp2.child("file.txt").write_str("content2").unwrap();
-        
+
         let dir1 = DiskDirectoryBuilder::new(tmp1.path());
         let dir2 = DiskDirectoryBuilder::new(tmp2.path());
-        
+
         let id1 = dir1.swhid().unwrap();
         let id2 = dir2.swhid().unwrap();
         assert_ne!(id1, id2);
@@ -263,31 +311,53 @@ mod tests {
     #[test]
     fn dir_file_order_independence() {
         let expected_swhid = "swh:1:dir:063012ee77491cc23b0bbad86cfd47e8309c80cb";
-        let dir = Directory::new(
-            vec![
-                Entry { name: b"c.txt".into(), mode: 0o100644, id: [0; 20] },
-                Entry { name: b"b.txt".into(), mode: 0o100644, id: [2; 20] },
-                Entry { name: b"a.txt".into(), mode: 0o100644, id: [1; 20] },
-            ]
-        );
+        let dir = Directory::new(vec![
+            Entry {
+                name: b"c.txt".into(),
+                mode: 0o100644,
+                id: [0; 20],
+            },
+            Entry {
+                name: b"b.txt".into(),
+                mode: 0o100644,
+                id: [2; 20],
+            },
+            Entry {
+                name: b"a.txt".into(),
+                mode: 0o100644,
+                id: [1; 20],
+            },
+        ]);
         assert_eq!(dir.swhid().unwrap().to_string(), expected_swhid);
 
-        let dir = Directory::new(
-            vec![
-                Entry { name: b"a.txt".into(), mode: 0o100644, id: [1; 20] },
-                Entry { name: b"b.txt".into(), mode: 0o100644, id: [2; 20] },
-                Entry { name: b"c.txt".into(), mode: 0o100644, id: [0; 20] },
-            ]
-        );
+        let dir = Directory::new(vec![
+            Entry {
+                name: b"a.txt".into(),
+                mode: 0o100644,
+                id: [1; 20],
+            },
+            Entry {
+                name: b"b.txt".into(),
+                mode: 0o100644,
+                id: [2; 20],
+            },
+            Entry {
+                name: b"c.txt".into(),
+                mode: 0o100644,
+                id: [0; 20],
+            },
+        ]);
         assert_eq!(dir.swhid().unwrap().to_string(), expected_swhid);
     }
 
     #[test]
     fn dir_with_binary_files() {
         let tmp = assert_fs::TempDir::new().unwrap();
-        tmp.child("binary.bin").write_binary(&[0x00, 0x01, 0xFF, 0xFE]).unwrap();
+        tmp.child("binary.bin")
+            .write_binary(&[0x00, 0x01, 0xFF, 0xFE])
+            .unwrap();
         tmp.child("text.txt").write_str("text content").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);
@@ -297,8 +367,10 @@ mod tests {
     fn dir_with_unicode_filenames() {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("文件.txt").write_str("unicode filename").unwrap();
-        tmp.child("файл.txt").write_str("cyrillic filename").unwrap();
-        
+        tmp.child("файл.txt")
+            .write_str("cyrillic filename")
+            .unwrap();
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);
@@ -309,7 +381,7 @@ mod tests {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("empty.txt").write_str("").unwrap();
         tmp.child("nonempty.txt").write_str("content").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);
@@ -318,10 +390,16 @@ mod tests {
     #[test]
     fn dir_with_special_characters() {
         let tmp = assert_fs::TempDir::new().unwrap();
-        tmp.child("file with spaces.txt").write_str("content").unwrap();
-        tmp.child("file-with-dashes.txt").write_str("content").unwrap();
-        tmp.child("file_with_underscores.txt").write_str("content").unwrap();
-        
+        tmp.child("file with spaces.txt")
+            .write_str("content")
+            .unwrap();
+        tmp.child("file-with-dashes.txt")
+            .write_str("content")
+            .unwrap();
+        tmp.child("file_with_underscores.txt")
+            .write_str("content")
+            .unwrap();
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);
@@ -331,7 +409,7 @@ mod tests {
     fn dir_swhid_format() {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("test.txt").write_str("test").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         let swhid_str = id.to_string();
@@ -343,7 +421,7 @@ mod tests {
     fn dir_swhid_roundtrip() {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("test.txt").write_str("test").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         let swhid_str = id.to_string();
@@ -355,7 +433,7 @@ mod tests {
     fn dir_swhid_digest_hex() {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("test.txt").write_str("test").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         let hex = id.digest_hex();
@@ -367,7 +445,7 @@ mod tests {
     fn dir_swhid_digest_bytes() {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("test.txt").write_str("test").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         let bytes = id.digest_bytes();
@@ -378,7 +456,7 @@ mod tests {
     fn dir_swhid_object_type() {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("test.txt").write_str("test").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);
@@ -388,7 +466,7 @@ mod tests {
     fn dir_swhid_version() {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("test.txt").write_str("test").unwrap();
-        
+
         let _dir = DiskDirectoryBuilder::new(tmp.path());
         assert_eq!(Swhid::VERSION, "1");
     }
@@ -397,7 +475,7 @@ mod tests {
     fn dir_swhid_equality() {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("test.txt").write_str("test").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id1 = dir.swhid().unwrap();
         let id2 = dir.swhid().unwrap();
@@ -408,7 +486,7 @@ mod tests {
     fn dir_swhid_hash_consistency() {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("test.txt").write_str("test").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id1 = dir.swhid().unwrap();
         let id2 = dir.swhid().unwrap();
@@ -428,7 +506,7 @@ mod tests {
         opts.follow_symlinks = true;
         opts.exclude_suffixes.push(".tmp".to_string());
         opts.exclude_suffixes.push(".log".to_string());
-        
+
         assert!(opts.follow_symlinks);
         assert_eq!(opts.exclude_suffixes.len(), 2);
     }
@@ -440,11 +518,11 @@ mod tests {
         tmp.child("exclude.tmp").write_str("exclude").unwrap();
         tmp.child("also.log").write_str("also exclude").unwrap();
         tmp.child("keep.log").write_str("keep").unwrap();
-        
+
         let mut opts = WalkOptions::default();
         opts.exclude_suffixes.push(".tmp".to_string());
         opts.exclude_suffixes.push(".log".to_string());
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path()).with_options(opts);
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);
@@ -455,10 +533,10 @@ mod tests {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("target.txt").write_str("target content").unwrap();
         tmp.child("link.txt").symlink_to_file("target.txt").unwrap();
-        
+
         let mut opts = WalkOptions::default();
         opts.follow_symlinks = true;
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path()).with_options(opts);
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);
@@ -483,10 +561,10 @@ mod tests {
     fn dir_walk_options_with_options() {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("test.txt").write_str("test").unwrap();
-        
+
         let mut opts = WalkOptions::default();
         opts.follow_symlinks = true;
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path()).with_options(opts);
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);
@@ -496,7 +574,7 @@ mod tests {
     fn dir_walk_options_new() {
         let tmp = assert_fs::TempDir::new().unwrap();
         tmp.child("test.txt").write_str("test").unwrap();
-        
+
         let dir = DiskDirectoryBuilder::new(tmp.path());
         let id = dir.swhid().unwrap();
         assert_eq!(id.object_type(), ObjectType::Directory);

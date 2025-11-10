@@ -2,7 +2,7 @@ use crate::core::{ObjectType, Swhid};
 use crate::hash::hash_content;
 
 /// SWHID v1.2 content object for computing content SWHIDs.
-/// 
+///
 /// This struct represents file content data and provides methods to compute
 /// SWHID v1.2 compliant content identifiers according to the specification.
 #[derive(Debug, Clone)]
@@ -14,20 +14,28 @@ use std::borrow::Cow;
 
 impl<'a> Content<'a> {
     /// Create a new Content object from byte data.
-    /// 
+    ///
     /// This implements SWHID v1.2 content object creation for any byte data.
     pub fn from_bytes(bytes: impl Into<Cow<'a, [u8]>>) -> Self {
-        Self { bytes: bytes.into() }
+        Self {
+            bytes: bytes.into(),
+        }
     }
 
-    #[cfg(feature="serde")]
-    pub fn as_bytes(&self) -> &[u8] { &self.bytes }
+    #[cfg(feature = "serde")]
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
+    }
 
-    pub fn len(&self) -> usize { self.bytes.len() }
-    pub fn is_empty(&self) -> bool { self.bytes.is_empty() }
+    pub fn len(&self) -> usize {
+        self.bytes.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
 
     /// Compute the SWHID v1.2 content identifier for this content.
-    /// 
+    ///
     /// This implements the SWHID v1.2 content hashing algorithm, which
     /// is compatible with Git's blob format for content objects.
     pub fn swhid(&self) -> Swhid {
@@ -89,7 +97,10 @@ mod tests {
         let content = Content::from_bytes(&[]);
         let swhid = content.swhid();
         assert_eq!(swhid.object_type(), ObjectType::Content);
-        assert_eq!(swhid.to_string(), "swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391");
+        assert_eq!(
+            swhid.to_string(),
+            "swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+        );
     }
 
     #[test]
@@ -97,7 +108,10 @@ mod tests {
         let content = Content::from_bytes(b"Hello, World!");
         let swhid = content.swhid();
         assert_eq!(swhid.object_type(), ObjectType::Content);
-        assert_eq!(swhid.to_string(), "swh:1:cnt:b45ef6fec89518d314f546fd6c3025367b721684");
+        assert_eq!(
+            swhid.to_string(),
+            "swh:1:cnt:b45ef6fec89518d314f546fd6c3025367b721684"
+        );
     }
 
     #[test]
@@ -132,7 +146,7 @@ mod tests {
         let unix_content = Content::from_bytes(b"line1\nline2\n");
         let windows_content = Content::from_bytes(b"line1\r\nline2\r\n");
         let mac_content = Content::from_bytes(b"line1\rline2\r");
-        
+
         assert_ne!(unix_content.swhid(), windows_content.swhid());
         assert_ne!(unix_content.swhid(), mac_content.swhid());
         assert_ne!(windows_content.swhid(), mac_content.swhid());

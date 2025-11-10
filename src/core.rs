@@ -5,18 +5,18 @@ use crate::error::SwhidError;
 
 /// Known SWH object kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature="serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ObjectType {
     /// file contents (Git blob)
-    Content,   // "cnt"
+    Content, // "cnt"
     /// directory (Git tree)
     Directory, // "dir"
     /// VCS commit / changeset
-    Revision,  // "rev"
+    Revision, // "rev"
     /// VCS annotated tag / release
-    Release,   // "rel"
+    Release, // "rel"
     /// Snapshot of repository refs
-    Snapshot,  // "snp"
+    Snapshot, // "snp"
 }
 
 impl ObjectType {
@@ -53,20 +53,32 @@ impl Swhid {
     pub const VERSION: &'static str = "1";
 
     pub fn new(object_type: ObjectType, digest: [u8; 20]) -> Self {
-        Self { object_type, digest }
+        Self {
+            object_type,
+            digest,
+        }
     }
-    pub fn object_type(&self) -> ObjectType { self.object_type }
-    pub fn digest_bytes(&self) -> &[u8; 20] { &self.digest }
+    pub fn object_type(&self) -> ObjectType {
+        self.object_type
+    }
+    pub fn digest_bytes(&self) -> &[u8; 20] {
+        &self.digest
+    }
 
     pub fn digest_hex(&self) -> String {
         hex::encode(self.digest)
     }
 }
 
-
 impl Display for Swhid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "swh:{}:{}:{}", Self::VERSION, self.object_type.as_tag(), self.digest_hex())
+        write!(
+            f,
+            "swh:{}:{}:{}",
+            Self::VERSION,
+            self.object_type.as_tag(),
+            self.digest_hex()
+        )
     }
 }
 
@@ -76,32 +88,45 @@ impl FromStr for Swhid {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Expect: swh:1:<tag>:<digest-hex>
         let mut it = s.split(':');
-        let scheme = it.next().ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
+        let scheme = it
+            .next()
+            .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
         if scheme != "swh" {
             return Err(SwhidError::InvalidScheme(scheme.to_owned()));
         }
-        let ver = it.next().ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
+        let ver = it
+            .next()
+            .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
         if ver != Self::VERSION {
             return Err(SwhidError::InvalidVersion(ver.to_owned()));
         }
-        let tag = it.next().ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
+        let tag = it
+            .next()
+            .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
         let object_type = ObjectType::from_tag(tag)?;
-        let digest_hex = it.next().ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
+        let digest_hex = it
+            .next()
+            .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
 
         if it.next().is_some() {
             // too many parts
             return Err(SwhidError::InvalidFormat(s.to_owned()));
         }
-        if digest_hex.len() != 40 || !digest_hex.bytes().all(|b| matches!(b, b'0'..=b'9'|b'a'..=b'f')) {
+        if digest_hex.len() != 40
+            || !digest_hex
+                .bytes()
+                .all(|b| matches!(b, b'0'..=b'9'|b'a'..=b'f'))
+        {
             return Err(SwhidError::InvalidDigest(digest_hex.to_owned()));
         }
         let mut raw = [0u8; 20];
-        hex::decode_to_slice(digest_hex, &mut raw).map_err(|_| SwhidError::InvalidDigest(digest_hex.to_owned()))?;
+        hex::decode_to_slice(digest_hex, &mut raw)
+            .map_err(|_| SwhidError::InvalidDigest(digest_hex.to_owned()))?;
         Ok(Swhid::new(object_type, raw))
     }
 }
 
-#[cfg(feature="serde")]
+#[cfg(feature = "serde")]
 impl serde::Serialize for Swhid {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -145,9 +170,14 @@ mod tests {
 
     #[test]
     fn roundtrip_core() {
-        let id: Swhid = "swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse().unwrap();
+        let id: Swhid = "swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse()
+            .unwrap();
         assert_eq!(id.object_type(), ObjectType::Content);
-        assert_eq!(id.to_string(), "swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391");
+        assert_eq!(
+            id.to_string(),
+            "swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+        );
     }
 
     #[test]
@@ -219,50 +249,95 @@ mod tests {
 
     #[test]
     fn swhid_digest_hex() {
-        let digest = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC];
+        let digest = [
+            0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
+        ];
         let swhid = Swhid::new(ObjectType::Content, digest);
-        assert_eq!(swhid.digest_hex(), "123456789abcdef0112233445566778899aabbcc");
+        assert_eq!(
+            swhid.digest_hex(),
+            "123456789abcdef0112233445566778899aabbcc"
+        );
     }
 
     #[test]
     fn swhid_display() {
-        let digest = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC];
+        let digest = [
+            0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
+        ];
         let swhid = Swhid::new(ObjectType::Content, digest);
-        assert_eq!(swhid.to_string(), "swh:1:cnt:123456789abcdef0112233445566778899aabbcc");
+        assert_eq!(
+            swhid.to_string(),
+            "swh:1:cnt:123456789abcdef0112233445566778899aabbcc"
+        );
     }
 
     #[test]
     fn swhid_display_different_types() {
-        let digest = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC];
-        
+        let digest = [
+            0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
+        ];
+
         let content = Swhid::new(ObjectType::Content, digest);
         let directory = Swhid::new(ObjectType::Directory, digest);
         let revision = Swhid::new(ObjectType::Revision, digest);
         let release = Swhid::new(ObjectType::Release, digest);
         let snapshot = Swhid::new(ObjectType::Snapshot, digest);
-        
-        assert_eq!(content.to_string(), "swh:1:cnt:123456789abcdef0112233445566778899aabbcc");
-        assert_eq!(directory.to_string(), "swh:1:dir:123456789abcdef0112233445566778899aabbcc");
-        assert_eq!(revision.to_string(), "swh:1:rev:123456789abcdef0112233445566778899aabbcc");
-        assert_eq!(release.to_string(), "swh:1:rel:123456789abcdef0112233445566778899aabbcc");
-        assert_eq!(snapshot.to_string(), "swh:1:snp:123456789abcdef0112233445566778899aabbcc");
+
+        assert_eq!(
+            content.to_string(),
+            "swh:1:cnt:123456789abcdef0112233445566778899aabbcc"
+        );
+        assert_eq!(
+            directory.to_string(),
+            "swh:1:dir:123456789abcdef0112233445566778899aabbcc"
+        );
+        assert_eq!(
+            revision.to_string(),
+            "swh:1:rev:123456789abcdef0112233445566778899aabbcc"
+        );
+        assert_eq!(
+            release.to_string(),
+            "swh:1:rel:123456789abcdef0112233445566778899aabbcc"
+        );
+        assert_eq!(
+            snapshot.to_string(),
+            "swh:1:snp:123456789abcdef0112233445566778899aabbcc"
+        );
     }
 
     #[test]
     fn swhid_parse_valid() {
-        let swhid: Swhid = "swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse().unwrap();
+        let swhid: Swhid = "swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse()
+            .unwrap();
         assert_eq!(swhid.object_type(), ObjectType::Content);
-        assert_eq!(swhid.digest_hex(), "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391");
+        assert_eq!(
+            swhid.digest_hex(),
+            "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+        );
     }
 
     #[test]
     fn swhid_parse_different_types() {
-        let content: Swhid = "swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse().unwrap();
-        let directory: Swhid = "swh:1:dir:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse().unwrap();
-        let revision: Swhid = "swh:1:rev:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse().unwrap();
-        let release: Swhid = "swh:1:rel:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse().unwrap();
-        let snapshot: Swhid = "swh:1:snp:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse().unwrap();
-        
+        let content: Swhid = "swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse()
+            .unwrap();
+        let directory: Swhid = "swh:1:dir:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse()
+            .unwrap();
+        let revision: Swhid = "swh:1:rev:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse()
+            .unwrap();
+        let release: Swhid = "swh:1:rel:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse()
+            .unwrap();
+        let snapshot: Swhid = "swh:1:snp:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse()
+            .unwrap();
+
         assert_eq!(content.object_type(), ObjectType::Content);
         assert_eq!(directory.object_type(), ObjectType::Directory);
         assert_eq!(revision.object_type(), ObjectType::Revision);
@@ -272,32 +347,52 @@ mod tests {
 
     #[test]
     fn swhid_parse_invalid_scheme() {
-        assert!("http:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse::<Swhid>().is_err());
-        assert!("ftp:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse::<Swhid>().is_err());
+        assert!("http:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse::<Swhid>()
+            .is_err());
+        assert!("ftp:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse::<Swhid>()
+            .is_err());
     }
 
     #[test]
     fn swhid_parse_invalid_version() {
-        assert!("swh:2:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse::<Swhid>().is_err());
-        assert!("swh:0:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse::<Swhid>().is_err());
+        assert!("swh:2:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse::<Swhid>()
+            .is_err());
+        assert!("swh:0:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse::<Swhid>()
+            .is_err());
     }
 
     #[test]
     fn swhid_parse_invalid_object_type() {
-        assert!("swh:1:invalid:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse::<Swhid>().is_err());
-        assert!("swh:1:CNT:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse::<Swhid>().is_err());
+        assert!("swh:1:invalid:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse::<Swhid>()
+            .is_err());
+        assert!("swh:1:CNT:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse::<Swhid>()
+            .is_err());
     }
 
     #[test]
     fn swhid_parse_invalid_digest_length() {
-        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c539".parse::<Swhid>().is_err()); // too short
-        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391a".parse::<Swhid>().is_err()); // too long
+        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c539"
+            .parse::<Swhid>()
+            .is_err()); // too short
+        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391a"
+            .parse::<Swhid>()
+            .is_err()); // too long
     }
 
     #[test]
     fn swhid_parse_invalid_digest_chars() {
-        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c539g".parse::<Swhid>().is_err()); // invalid char
-        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c539!".parse::<Swhid>().is_err()); // invalid char
+        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c539g"
+            .parse::<Swhid>()
+            .is_err()); // invalid char
+        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c539!"
+            .parse::<Swhid>()
+            .is_err()); // invalid char
     }
 
     #[test]
@@ -310,25 +405,37 @@ mod tests {
 
     #[test]
     fn swhid_parse_too_many_parts() {
-        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391:extra".parse::<Swhid>().is_err());
+        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391:extra"
+            .parse::<Swhid>()
+            .is_err());
     }
 
     #[test]
     fn swhid_parse_case_sensitive() {
-        assert!("swh:1:CNT:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse::<Swhid>().is_err());
-        assert!("swh:1:cnt:E69DE29BB2D1D6434B8B29AE775AD8C2E48C5391".parse::<Swhid>().is_err());
+        assert!("swh:1:CNT:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse::<Swhid>()
+            .is_err());
+        assert!("swh:1:cnt:E69DE29BB2D1D6434B8B29AE775AD8C2E48C5391"
+            .parse::<Swhid>()
+            .is_err());
     }
 
     #[test]
     fn swhid_equality() {
-        let digest1 = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC];
-        let digest2 = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCD];
-        
+        let digest1 = [
+            0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
+        ];
+        let digest2 = [
+            0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCD,
+        ];
+
         let swhid1 = Swhid::new(ObjectType::Content, digest1);
         let swhid2 = Swhid::new(ObjectType::Content, digest1);
         let swhid3 = Swhid::new(ObjectType::Content, digest2);
         let swhid4 = Swhid::new(ObjectType::Directory, digest1);
-        
+
         assert_eq!(swhid1, swhid2);
         assert_ne!(swhid1, swhid3);
         assert_ne!(swhid1, swhid4);
@@ -338,7 +445,10 @@ mod tests {
     fn swhid_hash() {
         use std::collections::HashMap;
         let mut map = HashMap::new();
-        let digest = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC];
+        let digest = [
+            0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
+        ];
         let swhid = Swhid::new(ObjectType::Content, digest);
         map.insert(swhid.clone(), "content");
         assert_eq!(map.get(&swhid), Some(&"content"));
@@ -346,7 +456,10 @@ mod tests {
 
     #[test]
     fn swhid_clone() {
-        let digest = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC];
+        let digest = [
+            0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
+        ];
         let swhid1 = Swhid::new(ObjectType::Content, digest);
         let swhid2 = swhid1.clone();
         assert_eq!(swhid1, swhid2);
@@ -354,7 +467,10 @@ mod tests {
 
     #[test]
     fn swhid_debug() {
-        let digest = [0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC];
+        let digest = [
+            0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
+            0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
+        ];
         let swhid = Swhid::new(ObjectType::Content, digest);
         let debug_str = format!("{swhid:?}");
         assert!(debug_str.contains("Swhid"));
@@ -373,7 +489,7 @@ mod tests {
     fn swhid_roundtrip_different_types() {
         let types = ["cnt", "dir", "rev", "rel", "snp"];
         let digest = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391";
-        
+
         for obj_type in &types {
             let original = format!("swh:1:{obj_type}:{digest}");
             let parsed: Swhid = original.parse().unwrap();
@@ -390,7 +506,7 @@ mod tests {
             "123456789abcdef0112233445566778899aabbcc",
             "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391",
         ];
-        
+
         for digest in &digests {
             let original = format!("swh:1:cnt:{digest}");
             let parsed: Swhid = original.parse().unwrap();
@@ -401,24 +517,38 @@ mod tests {
 
     #[test]
     fn swhid_parse_whitespace() {
-        assert!(" swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse::<Swhid>().is_err());
-        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391 ".parse::<Swhid>().is_err());
-        assert!(" swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391 ".parse::<Swhid>().is_err());
+        assert!(" swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse::<Swhid>()
+            .is_err());
+        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391 "
+            .parse::<Swhid>()
+            .is_err());
+        assert!(" swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391 "
+            .parse::<Swhid>()
+            .is_err());
     }
 
     #[test]
     fn swhid_parse_uppercase_digest() {
-        assert!("swh:1:cnt:E69DE29BB2D1D6434B8B29AE775AD8C2E48C5391".parse::<Swhid>().is_err());
+        assert!("swh:1:cnt:E69DE29BB2D1D6434B8B29AE775AD8C2E48C5391"
+            .parse::<Swhid>()
+            .is_err());
     }
 
     #[test]
     fn swhid_parse_mixed_case_digest() {
-        assert!("swh:1:cnt:E69de29bb2d1d6434b8b29ae775ad8c2e48c5391".parse::<Swhid>().is_err());
+        assert!("swh:1:cnt:E69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+            .parse::<Swhid>()
+            .is_err());
     }
 
     #[test]
     fn swhid_parse_special_chars() {
-        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391\n".parse::<Swhid>().is_err());
-        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391\t".parse::<Swhid>().is_err());
+        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391\n"
+            .parse::<Swhid>()
+            .is_err());
+        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391\t"
+            .parse::<Swhid>()
+            .is_err());
     }
 }

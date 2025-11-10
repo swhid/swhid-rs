@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 use swhid::{Content, DiskDirectoryBuilder, WalkOptions};
-use swhid::{Swhid, QualifiedSwhid};
+use swhid::{QualifiedSwhid, Swhid};
 
 #[cfg(feature = "git")]
 use swhid::git;
@@ -95,7 +95,7 @@ enum GitCommand {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.cmd {
-        Command::Content{ file } => {
+        Command::Content { file } => {
             let bytes = if let Some(p) = file {
                 std::fs::read(p)?
             } else {
@@ -107,13 +107,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let s = Content::from_bytes(bytes).swhid();
             println!("{s}");
         }
-        Command::Dir{ path, follow_symlinks, exclude } => {
-            let mut opts = WalkOptions { follow_symlinks, ..Default::default() };
+        Command::Dir {
+            path,
+            follow_symlinks,
+            exclude,
+        } => {
+            let mut opts = WalkOptions {
+                follow_symlinks,
+                ..Default::default()
+            };
             opts.exclude_suffixes = exclude;
-            let s = DiskDirectoryBuilder::new(&path).with_options(opts).swhid()?;
+            let s = DiskDirectoryBuilder::new(&path)
+                .with_options(opts)
+                .swhid()?;
             println!("{s}");
         }
-        Command::Parse{ swhid } => {
+        Command::Parse { swhid } => {
             // Try qualified first, fallback to core
             match swhid.parse::<QualifiedSwhid>() {
                 Ok(q) => println!("{q}"),
@@ -123,71 +132,91 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        Command::Verify{ path, swhid, follow_symlinks, exclude } => {
+        Command::Verify {
+            path,
+            swhid,
+            follow_symlinks,
+            exclude,
+        } => {
             let expected: Swhid = swhid.parse()?;
             let actual = if path.is_file() {
                 let bytes = std::fs::read(&path)?;
                 Content::from_bytes(bytes).swhid()
             } else if path.is_dir() {
-                let mut opts = WalkOptions { follow_symlinks, ..Default::default() };
+                let mut opts = WalkOptions {
+                    follow_symlinks,
+                    ..Default::default()
+                };
                 opts.exclude_suffixes = exclude;
-                DiskDirectoryBuilder::new(&path).with_options(opts).swhid()?
+                DiskDirectoryBuilder::new(&path)
+                    .with_options(opts)
+                    .swhid()?
             } else {
-                eprintln!("Error: {} is neither a file nor a directory", path.display());
+                eprintln!(
+                    "Error: {} is neither a file nor a directory",
+                    path.display()
+                );
                 std::process::exit(1);
             };
-            
+
             if actual == expected {
-                println!("✓ Verification successful: {} matches {}", path.display(), expected);
+                println!(
+                    "✓ Verification successful: {} matches {}",
+                    path.display(),
+                    expected
+                );
                 std::process::exit(0);
             } else {
-                println!("✗ Verification failed: {} does not match {}", path.display(), expected);
+                println!(
+                    "✗ Verification failed: {} does not match {}",
+                    path.display(),
+                    expected
+                );
                 println!("  Expected: {expected}");
                 println!("  Actual:   {actual}");
                 std::process::exit(1);
             }
         }
         #[cfg(feature = "git")]
-        Command::Git { cmd } => {
-            match cmd {
-                GitCommand::Revision { repo, commit } => {
-                    let repo = git::open_repo(&repo)?;
-                    let commit_oid = if let Some(commit_str) = commit {
-                        git2::Oid::from_str(&commit_str)
-                            .map_err(|e| format!("Invalid commit hash: {e}"))?
-                    } else {
-                        git::get_head_commit(&repo)?
-                    };
-                    let swhid = git::revision_swhid(&repo, &commit_oid)?;
-                    println!("{swhid}");
-                }
-                GitCommand::Release { repo, tag } => {
-                    let repo = git::open_repo(&repo)?;
-                    let tag_oid = repo.refname_to_id(&format!("refs/tags/{tag}"))
-                        .map_err(|e| format!("Tag not found: {e}"))?;
-                    let swhid = git::release_swhid(&repo, &tag_oid)?;
-                    println!("{swhid}");
-                }
-                GitCommand::Snapshot { repo, commit } => {
-                    let repo = git::open_repo(&repo)?;
-                    let commit_oid = if let Some(commit_str) = commit {
-                        git2::Oid::from_str(&commit_str)
-                            .map_err(|e| format!("Invalid commit hash: {e}"))?
-                    } else {
-                        git::get_head_commit(&repo)?
-                    };
-                    let swhid = git::snapshot_swhid(&repo, &commit_oid)?;
-                    println!("{swhid}");
-                }
-                GitCommand::Tags { repo } => {
-                    let repo = git::open_repo(&repo)?;
-                    let tags = git::get_tags(&repo)?;
-                    for tag_oid in tags {
-                        println!("{tag_oid}");
-                    }
+        Command::Git { cmd } => match cmd {
+            GitCommand::Revision { repo, commit } => {
+                let repo = git::open_repo(&repo)?;
+                let commit_oid = if let Some(commit_str) = commit {
+                    git2::Oid::from_str(&commit_str)
+                        .map_err(|e| format!("Invalid commit hash: {e}"))?
+                } else {
+                    git::get_head_commit(&repo)?
+                };
+                let swhid = git::revision_swhid(&repo, &commit_oid)?;
+                println!("{swhid}");
+            }
+            GitCommand::Release { repo, tag } => {
+                let repo = git::open_repo(&repo)?;
+                let tag_oid = repo
+                    .refname_to_id(&format!("refs/tags/{tag}"))
+                    .map_err(|e| format!("Tag not found: {e}"))?;
+                let swhid = git::release_swhid(&repo, &tag_oid)?;
+                println!("{swhid}");
+            }
+            GitCommand::Snapshot { repo, commit } => {
+                let repo = git::open_repo(&repo)?;
+                let commit_oid = if let Some(commit_str) = commit {
+                    git2::Oid::from_str(&commit_str)
+                        .map_err(|e| format!("Invalid commit hash: {e}"))?
+                } else {
+                    git::get_head_commit(&repo)?
+                };
+                let swhid = git::snapshot_swhid(&repo, &commit_oid)?;
+                println!("{swhid}");
+            }
+            GitCommand::Tags { repo } => {
+                let repo = git::open_repo(&repo)?;
+                let tags = git::get_tags(&repo)?;
+                for tag_oid in tags {
+                    println!("{tag_oid}");
                 }
             }
-        }
+        },
     }
     Ok(())
 }
