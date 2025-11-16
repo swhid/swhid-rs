@@ -19,6 +19,9 @@ pub struct Release {
     pub author_timestamp_offset: Option<Bytestring>,
     pub extra_headers: Vec<(Bytestring, Bytestring)>,
     pub message: Option<Bytestring>,
+    /// Raw tagger line from Git object (for exact reconstruction)
+    /// If Some, use this directly instead of reconstructing from author/timestamp/offset
+    pub raw_tagger_line: Option<Bytestring>,
 }
 
 impl Release {
@@ -44,31 +47,39 @@ pub fn rel_manifest(rev: &Release) -> Vec<u8> {
         author_timestamp_offset,
         extra_headers,
         message,
+        raw_tagger_line,
     } = rev;
     let mut writer = HeaderWriter::default();
 
     writer.push(b"object", hex::encode(object));
+    // For Git tag objects, the type in the manifest must be "tag" (not "release")
+    // to match the exact Git object format
     writer.push(
         b"type",
         match object_type {
             ReleaseTargetType::Revision => b"commit".as_ref(),
             ReleaseTargetType::Directory => b"tree".as_ref(),
-            ReleaseTargetType::Release => b"release".as_ref(),
+            ReleaseTargetType::Release => b"tag".as_ref(),  // Git uses "tag", not "release"
             ReleaseTargetType::Content => b"blob".as_ref(),
         },
     );
     writer.push(b"tag", name);
 
-    match (author, author_timestamp, author_timestamp_offset) {
-        (Some(author), Some(author_timestamp), Some(author_timestamp_offset)) => writer
-            .push_authorship(
-                b"tagger",
-                author,
-                *author_timestamp,
-                author_timestamp_offset,
-            ),
-        (None, None, None) => (),
-        _ => (), // unspecified, see https://github.com/swhid/specification/issues/62
+    // Use raw tagger line if available for exact byte match, otherwise reconstruct
+    if let Some(raw_tagger) = raw_tagger_line {
+        writer.push(b"tagger", raw_tagger);
+    } else {
+        match (author, author_timestamp, author_timestamp_offset) {
+            (Some(author), Some(author_timestamp), Some(author_timestamp_offset)) => writer
+                .push_authorship(
+                    b"tagger",
+                    author,
+                    *author_timestamp,
+                    author_timestamp_offset,
+                ),
+            (None, None, None) => (),
+            _ => (), // unspecified, see https://github.com/swhid/specification/issues/62
+        }
     }
 
     for (key, value) in extra_headers {
