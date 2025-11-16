@@ -122,6 +122,8 @@ fn test_release_swhid() {
         .unwrap();
 
     let rev = release_from_git(&repo, &tag_oid).unwrap();
+    // The raw_tagger_line should contain the exact tagger line from the Git object
+    // Format: "Name <email> timestamp offset"
     assert_eq!(
         rev,
         Release {
@@ -133,6 +135,7 @@ fn test_release_swhid() {
             author_timestamp_offset: Some(bs("+0100")),
             extra_headers: Vec::new(),
             message: Some(bs("Test tag")),
+            raw_tagger_line: Some(bs("Test User <test@example.com> 1763027354 +0100")),
         }
     );
 

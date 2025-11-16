@@ -20,6 +20,7 @@ fn simple_rel_hash() {
         author_timestamp_offset: Some(bs("+0100")),
         extra_headers: Vec::new(),
         message: Some(bs("Test tag")),
+        raw_tagger_line: None,
     };
 
     // Checked against the implementation in https://archive.softwareheritage.org/swh:1:dir:60e683f48069373ee85227f2d7ab2eb1a8873ddb;origin=https://gitlab.softwareheritage.org/swh/devel/swh-model.git;visit=swh:1:snp:291aefbdccd43abac57629431201c2fd55284df7;anchor=swh:1:rev:9e54500902fc00ab1e6400431e2803b9bb41cc0a
