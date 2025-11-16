@@ -54,8 +54,19 @@ fn parse_signature(sig: Signature) -> (Bytestring, i64, Bytestring) {
 ///
 /// This implements the SWHID v1.2 revision hashing algorithm for Git commits,
 /// creating a `swh:1:rev:<digest>` identifier according to the specification.
+///
+/// For Git objects, this uses the Git commit object hash (OID) directly, which
+/// includes GPG signatures. This ensures compatibility with Git and other SWHID
+/// implementations (git-cmd, pygit2, etc.).
+///
+/// Note: While the SWHID specification describes component-based computation,
+/// for Git objects the Git OID is equivalent since it includes all components
+/// including GPG signatures in the `gpgsig` extra header.
 pub fn revision_swhid(repo: &Repository, commit_oid: &git2::Oid) -> Result<Swhid, SwhidError> {
-    revision_from_git(repo, commit_oid).map(|rev| rev.swhid())
+    // For Git objects, use the Git object hash directly (includes GPG signatures)
+    // This is equivalent to component-based computation per SWHID spec 5.4
+    let oid_array = oid_to_array(*commit_oid)?;
+    Ok(Swhid::new(crate::ObjectType::Revision, oid_array))
 }
 
 #[doc(hidden)]
@@ -98,8 +109,19 @@ pub fn revision_from_git(
 ///
 /// This implements the SWHID v1.2 release hashing algorithm for Git tags,
 /// creating a `swh:1:rel:<digest>` identifier according to the specification.
+///
+/// For Git objects, this uses the Git tag object hash (OID) directly, which
+/// includes GPG signatures (embedded in the message). This ensures compatibility
+/// with Git and other SWHID implementations (git-cmd, pygit2, etc.).
+///
+/// Note: While the SWHID specification describes component-based computation,
+/// for Git objects the Git OID is equivalent since it includes all components
+/// including GPG signatures in the message.
 pub fn release_swhid(repo: &Repository, tag_oid: &git2::Oid) -> Result<Swhid, SwhidError> {
-    release_from_git(repo, tag_oid).map(|rel| rel.swhid())
+    // For Git objects, use the Git object hash directly (includes GPG signatures)
+    // This is equivalent to component-based computation per SWHID spec 5.5
+    let oid_array = oid_to_array(*tag_oid)?;
+    Ok(Swhid::new(crate::ObjectType::Release, oid_array))
 }
 
 #[doc(hidden)]
