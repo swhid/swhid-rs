@@ -199,7 +199,6 @@ fn test_release_swhid() {
             author: Some(bs("Test User <test@example.com>")),
             author_timestamp: Some(1763027354),
             author_timestamp_offset: Some(bs("+0100")),
-            extra_headers: Vec::new(),
             message: Some(bs("Test tag")),
         }
     );
