@@ -195,7 +195,6 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
         author,
         author_timestamp,
         author_timestamp_offset,
-        extra_headers: Vec::new(), // FIXME: does not seem to be exposed by git2
         message: tag.message_bytes().map(Into::into),
     })
 }

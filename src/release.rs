@@ -17,7 +17,6 @@ pub struct Release {
     pub author: Option<Bytestring>,
     pub author_timestamp: Option<i64>,
     pub author_timestamp_offset: Option<Bytestring>,
-    pub extra_headers: Vec<(Bytestring, Bytestring)>,
     pub message: Option<Bytestring>,
 }
 
@@ -42,7 +41,6 @@ pub fn rel_manifest(rev: &Release) -> Vec<u8> {
         author,
         author_timestamp,
         author_timestamp_offset,
-        extra_headers,
         message,
     } = rev;
     let mut writer = HeaderWriter::default();
@@ -69,10 +67,6 @@ pub fn rel_manifest(rev: &Release) -> Vec<u8> {
             ),
         (None, None, None) => (),
         _ => (), // unspecified, see https://github.com/swhid/specification/issues/62
-    }
-
-    for (key, value) in extra_headers {
-        writer.push(key, value)
     }
 
     writer.build(message.as_ref())
