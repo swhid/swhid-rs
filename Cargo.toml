@@ -23,7 +23,6 @@ sha1collisiondetection = { version = "0.3" }
 sha2 = "0.10"
 base64 = "0.22"
 data-encoding = "2.5"
-z85 = "0.1"
 git2 = { version = "0.20", optional = true }
 
 [dev-dependencies]

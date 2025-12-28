@@ -1,10 +1,12 @@
 pub mod hex;
 pub mod base64;
 pub mod base32;
+pub mod base85;
 
 pub use hex::HexSerializer;
 pub use base64::{Base64Serializer, Base64UrlSerializer};
 pub use base32::{Base32Serializer, Base32HexSerializer};
+pub use base85::Z85Serializer;
 
 use crate::error::SwhidError;
 
@@ -73,6 +75,15 @@ mod tests {
     #[test]
     fn base32hex_serializer_roundtrip() {
         let serializer = Base32HexSerializer::new();
+        let data = vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0];
+        let encoded = serializer.encode(&data);
+        let decoded = serializer.decode(&encoded).unwrap();
+        assert_eq!(data, decoded);
+    }
+
+    #[test]
+    fn z85_serializer_roundtrip() {
+        let serializer = Z85Serializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0];
         let encoded = serializer.encode(&data);
         let decoded = serializer.decode(&encoded).unwrap();
