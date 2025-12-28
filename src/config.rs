@@ -1,5 +1,5 @@
 use crate::hash::{HashFunction, Sha1Hash, Sha256Hash};
-use crate::serialization::{DigestSerializer, HexSerializer, Base64Serializer, Base64UrlSerializer};
+use crate::serialization::{DigestSerializer, HexSerializer, Base64Serializer, Base64UrlSerializer, Base32Serializer, Base32HexSerializer, Z85Serializer};
 
 /// Configuration bundling a hash function and serialization format.
 ///
@@ -74,6 +74,42 @@ impl HashConfig {
             "2".to_string(),
         )
     }
+
+    /// Create v2 configuration with SHA256 + base32.
+    ///
+    /// This configuration uses SHA256 with Base32 (RFC 4648) serialization
+    /// for a compact representation (52 chars for 32-byte digest).
+    pub fn v2_sha256_base32() -> Self {
+        Self::new(
+            Box::new(Sha256Hash::new()),
+            Box::new(Base32Serializer::new()),
+            "2".to_string(),
+        )
+    }
+
+    /// Create v2 configuration with SHA256 + base32hex.
+    ///
+    /// This configuration uses SHA256 with Base32hex serialization
+    /// for a compact representation (52 chars for 32-byte digest).
+    pub fn v2_sha256_base32hex() -> Self {
+        Self::new(
+            Box::new(Sha256Hash::new()),
+            Box::new(Base32HexSerializer::new()),
+            "2".to_string(),
+        )
+    }
+
+    /// Create v2 configuration with SHA256 + z85.
+    ///
+    /// This configuration uses SHA256 with Z85 (ZeroMQ Base85) serialization
+    /// for the most compact representation (40 chars for 32-byte digest).
+    pub fn v2_sha256_z85() -> Self {
+        Self::new(
+            Box::new(Sha256Hash::new()),
+            Box::new(Z85Serializer::new()),
+            "2".to_string(),
+        )
+    }
 }
 
 impl Default for HashConfig {
@@ -144,23 +180,65 @@ mod tests {
         let hex_config = HashConfig::v2_sha256_hex();
         let base64_config = HashConfig::v2_sha256_base64();
         let base64url_config = HashConfig::v2_sha256_base64url();
+        let base32_config = HashConfig::v2_sha256_base32();
+        let base32hex_config = HashConfig::v2_sha256_base32hex();
+        let z85_config = HashConfig::v2_sha256_z85();
 
-        let data = vec![0x12, 0x34, 0x56, 0x78];
+        let data = vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
         let hash = hex_config.hash_function.hash(&data);
 
         let hex_encoded = hex_config.serializer.encode(&hash);
         let base64_encoded = base64_config.serializer.encode(&hash);
         let base64url_encoded = base64url_config.serializer.encode(&hash);
+        let base32_encoded = base32_config.serializer.encode(&hash);
+        let base32hex_encoded = base32hex_config.serializer.encode(&hash);
+        let z85_encoded = z85_config.serializer.encode(&hash);
 
         // All should decode to the same hash
         assert_eq!(hex_config.serializer.decode(&hex_encoded).unwrap(), hash);
         assert_eq!(base64_config.serializer.decode(&base64_encoded).unwrap(), hash);
         assert_eq!(base64url_config.serializer.decode(&base64url_encoded).unwrap(), hash);
+        assert_eq!(base32_config.serializer.decode(&base32_encoded).unwrap(), hash);
+        assert_eq!(base32hex_config.serializer.decode(&base32hex_encoded).unwrap(), hash);
+        assert_eq!(z85_config.serializer.decode(&z85_encoded).unwrap(), hash);
 
         // But encodings are different
         assert_ne!(hex_encoded, base64_encoded);
         assert_ne!(hex_encoded, base64url_encoded);
-        assert_ne!(base64_encoded, base64url_encoded);
+        assert_ne!(hex_encoded, base32_encoded);
+        assert_ne!(hex_encoded, z85_encoded);
+        
+        // Verify compactness: z85 < base64 < base32 < hex
+        assert!(z85_encoded.len() < base64_encoded.len());
+        assert!(base64_encoded.len() < base32_encoded.len());
+        assert!(base32_encoded.len() < hex_encoded.len());
+    }
+
+    #[test]
+    fn config_v2_sha256_base32() {
+        let config = HashConfig::v2_sha256_base32();
+        assert_eq!(config.version, "2");
+        assert_eq!(config.hash_function.name(), "sha256");
+        assert_eq!(config.hash_function.digest_size(), 32);
+        assert_eq!(config.serializer.name(), "base32");
+    }
+
+    #[test]
+    fn config_v2_sha256_base32hex() {
+        let config = HashConfig::v2_sha256_base32hex();
+        assert_eq!(config.version, "2");
+        assert_eq!(config.hash_function.name(), "sha256");
+        assert_eq!(config.hash_function.digest_size(), 32);
+        assert_eq!(config.serializer.name(), "base32hex");
+    }
+
+    #[test]
+    fn config_v2_sha256_z85() {
+        let config = HashConfig::v2_sha256_z85();
+        assert_eq!(config.version, "2");
+        assert_eq!(config.hash_function.name(), "sha256");
+        assert_eq!(config.hash_function.digest_size(), 32);
+        assert_eq!(config.serializer.name(), "z85");
     }
 }
 
