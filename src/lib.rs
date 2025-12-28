@@ -7,7 +7,11 @@ pub mod error;
 #[cfg(feature = "git")]
 pub mod git;
 pub mod hash;
+<<<<<<< HEAD
 pub mod permissions;
+=======
+pub mod config;
+>>>>>>> 9bca75e (feat: Create HashConfig structure)
 pub mod qualifier;
 pub mod release;
 pub mod revision;
