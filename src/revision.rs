@@ -83,3 +83,48 @@ pub fn rev_manifest(rev: &Revision) -> Vec<u8> {
 
     writer.build(message.as_ref())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::HashConfig;
+
+    #[test]
+    fn revision_swhid_v1() {
+        let rev = Revision {
+            directory: [0u8; 20],
+            parents: vec![],
+            author: b"Test Author".as_ref().into(),
+            author_timestamp: 1234567890,
+            author_timestamp_offset: b"+0000".as_ref().into(),
+            committer: b"Test Committer".as_ref().into(),
+            committer_timestamp: 1234567890,
+            committer_timestamp_offset: b"+0000".as_ref().into(),
+            extra_headers: vec![],
+            message: None,
+        };
+        let swhid = rev.swhid();
+        assert_eq!(swhid.version(), "1");
+        assert_eq!(swhid.digest_bytes().len(), 20);
+    }
+
+    #[test]
+    fn revision_swhid_with_config_v2() {
+        let rev = Revision {
+            directory: [0u8; 20],
+            parents: vec![],
+            author: b"Test Author".as_ref().into(),
+            author_timestamp: 1234567890,
+            author_timestamp_offset: b"+0000".as_ref().into(),
+            committer: b"Test Committer".as_ref().into(),
+            committer_timestamp: 1234567890,
+            committer_timestamp_offset: b"+0000".as_ref().into(),
+            extra_headers: vec![],
+            message: None,
+        };
+        let config = HashConfig::v2_sha256_hex();
+        let swhid = rev.swhid_with_config(&config);
+        assert_eq!(swhid.version(), "2");
+        assert_eq!(swhid.digest_bytes().len(), 32);
+    }
+}

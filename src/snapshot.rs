@@ -82,6 +82,29 @@ impl Snapshot {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::HashConfig;
+
+    #[test]
+    fn snapshot_swhid_v1() {
+        let snapshot = Snapshot::new(vec![]).unwrap();
+        let swhid = snapshot.swhid();
+        assert_eq!(swhid.version(), "1");
+        assert_eq!(swhid.digest_bytes().len(), 20);
+    }
+
+    #[test]
+    fn snapshot_swhid_with_config_v2() {
+        let snapshot = Snapshot::new(vec![]).unwrap();
+        let config = HashConfig::v2_sha256_hex();
+        let swhid = snapshot.swhid_with_config(&config);
+        assert_eq!(swhid.version(), "2");
+        assert_eq!(swhid.digest_bytes().len(), 32);
+    }
+}
+
 /// Compute the SWHID v1.2 snapshot manifest (concatenation of branches).
 ///
 /// This implements the SWHID v1.2 directory tree format, which is compatible

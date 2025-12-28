@@ -93,3 +93,44 @@ pub fn rel_manifest(rev: &Release) -> Vec<u8> {
 
     writer.build(message.as_ref())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::HashConfig;
+
+    #[test]
+    fn release_swhid_v1() {
+        let release = Release {
+            object: [0u8; 20],
+            object_type: ReleaseTargetType::Revision,
+            name: b"v1.0.0".as_ref().into(),
+            author: None,
+            author_timestamp: None,
+            author_timestamp_offset: None,
+            extra_headers: vec![],
+            message: None,
+        };
+        let swhid = release.swhid();
+        assert_eq!(swhid.version(), "1");
+        assert_eq!(swhid.digest_bytes().len(), 20);
+    }
+
+    #[test]
+    fn release_swhid_with_config_v2() {
+        let release = Release {
+            object: [0u8; 20],
+            object_type: ReleaseTargetType::Revision,
+            name: b"v1.0.0".as_ref().into(),
+            author: None,
+            author_timestamp: None,
+            author_timestamp_offset: None,
+            extra_headers: vec![],
+            message: None,
+        };
+        let config = HashConfig::v2_sha256_hex();
+        let swhid = release.swhid_with_config(&config);
+        assert_eq!(swhid.version(), "2");
+        assert_eq!(swhid.digest_bytes().len(), 32);
+    }
+}
