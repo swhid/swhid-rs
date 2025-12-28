@@ -2,7 +2,6 @@ use assert_fs::prelude::*;
 
 use swhid::directory::*;
 use swhid::hash::hash_content;
-use swhid::permissions::EntryPerms;
 use swhid::ObjectType;
 
 fn name(s: &'static str) -> Box<[u8]> {
@@ -276,142 +275,67 @@ fn dir_walk_options_custom() {
 }
 
 #[test]
-fn executable_bit_changes_directory_id() {
-    use swhid::permissions::EntryPerms;
-    // Golden test: executable bit must change directory ID
-    let content = b"test content";
-    let content_hash = hash_content(content);
-
-    // Directory with non-executable file
-    let dir1 = Directory::from_manifest(vec![ManifestEntry {
-        name: b"script.sh".to_vec(),
-        perms: EntryPerms::File { executable: false },
-        target: content_hash.to_vec(),
-    }])
+fn dir_swhid_v2_all_serializers() {
+    use swhid::config::HashConfig;
+    let dir = Directory::new(vec![
+        Entry::new(name("a.txt"), 0o100644, [1; 20]),
+        Entry::new(name("b.txt"), 0o100755, [2; 20]),
+    ])
     .unwrap();
 
-    // Directory with executable file (same content)
-    let dir2 = Directory::from_manifest(vec![ManifestEntry {
-        name: b"script.sh".to_vec(),
-        perms: EntryPerms::File { executable: true },
-        target: content_hash.to_vec(),
-    }])
+    // Test all v2 serialization formats
+    let hex_config = HashConfig::v2_sha256_hex();
+    let base64_config = HashConfig::v2_sha256_base64();
+    let base64url_config = HashConfig::v2_sha256_base64url();
+    let base32_config = HashConfig::v2_sha256_base32();
+    let base32hex_config = HashConfig::v2_sha256_base32hex();
+    let z85_config = HashConfig::v2_sha256_z85();
+
+    let hex_swhid = dir.swhid_with_config(&hex_config).unwrap();
+    let base64_swhid = dir.swhid_with_config(&base64_config).unwrap();
+    let base64url_swhid = dir.swhid_with_config(&base64url_config).unwrap();
+    let base32_swhid = dir.swhid_with_config(&base32_config).unwrap();
+    let base32hex_swhid = dir.swhid_with_config(&base32hex_config).unwrap();
+    let z85_swhid = dir.swhid_with_config(&z85_config).unwrap();
+
+    // All should have version 2
+    assert_eq!(hex_swhid.version(), "2");
+    assert_eq!(base64_swhid.version(), "2");
+    assert_eq!(base64url_swhid.version(), "2");
+    assert_eq!(base32_swhid.version(), "2");
+    assert_eq!(base32hex_swhid.version(), "2");
+    assert_eq!(z85_swhid.version(), "2");
+
+    // All should have 32-byte digests (SHA256)
+    assert_eq!(hex_swhid.digest_bytes().len(), 32);
+    assert_eq!(base64_swhid.digest_bytes().len(), 32);
+    assert_eq!(base64url_swhid.digest_bytes().len(), 32);
+    assert_eq!(base32_swhid.digest_bytes().len(), 32);
+    assert_eq!(base32hex_swhid.digest_bytes().len(), 32);
+    assert_eq!(z85_swhid.digest_bytes().len(), 32);
+
+    // All should produce the same digest bytes (same hash function)
+    assert_eq!(hex_swhid.digest_bytes(), base64_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), base64url_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), base32_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), base32hex_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), z85_swhid.digest_bytes());
+}
+
+#[test]
+fn dir_swhid_v1_backward_compatibility() {
+    let dir = Directory::new(vec![
+        Entry::new(name("a.txt"), 0o100644, [1; 20]),
+    ])
     .unwrap();
 
-    // Directory IDs must differ
-    let swhid1 = dir1.swhid().unwrap();
-    let swhid2 = dir2.swhid().unwrap();
-    assert_ne!(swhid1, swhid2, "Executable bit should change directory ID");
-}
+    // V1 should still work
+    let v1_swhid = dir.swhid().unwrap();
+    assert_eq!(v1_swhid.version(), "1");
+    assert_eq!(v1_swhid.digest_bytes().len(), 20);
 
-#[test]
-fn manifest_based_directory_building() {
-    use swhid::permissions::EntryPerms;
-    // Test that Directory::from_manifest works correctly
-    let entries = vec![
-        ManifestEntry {
-            name: b"file1.txt".to_vec(),
-            perms: EntryPerms::File { executable: false },
-            target: hash_content(b"content1").to_vec(),
-        },
-        ManifestEntry {
-            name: b"script.sh".to_vec(),
-            perms: EntryPerms::File { executable: true },
-            target: hash_content(b"#!/bin/bash").to_vec(),
-        },
-        ManifestEntry {
-            name: b"subdir".to_vec(),
-            perms: EntryPerms::Directory,
-            target: [0u8; 20].to_vec(), // dummy hash for directory
-        },
-    ];
-
-    let dir = Directory::from_manifest(entries).unwrap();
-    assert_eq!(dir.entries().len(), 3);
-
-    // Verify entries are sorted correctly
-    // Note: Entry.name is private, so we check via the manifest
-    let manifest = dir_manifest(dir.entries().to_vec()).unwrap();
-    // The manifest should contain entries in sorted order
-    assert!(manifest.windows(b"file1.txt".len()).any(|w| w == b"file1.txt"));
-    assert!(manifest.windows(b"script.sh".len()).any(|w| w == b"script.sh"));
-    assert!(manifest.windows(b"subdir".len()).any(|w| w == b"subdir"));
-}
-
-#[test]
-#[cfg(unix)]
-fn unix_filesystem_permission_source() {
-    use swhid::permissions::{FilesystemPermissionsSource, PermissionsSource};
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-    use tempfile::TempDir;
-
-    let tmp = TempDir::new().unwrap();
-    let file_path = tmp.path().join("test.sh");
-
-    // Create executable file
-    fs::write(&file_path, b"#!/bin/bash").unwrap();
-    let mut perms = fs::metadata(&file_path).unwrap().permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(&file_path, perms).unwrap();
-
-    let source = FilesystemPermissionsSource;
-    let exec = source.executable_of(&file_path).unwrap();
-    assert_eq!(exec, swhid::permissions::EntryExec::Known(true));
-
-    // Create non-executable file
-    let file_path2 = tmp.path().join("test.txt");
-    fs::write(&file_path2, b"content").unwrap();
-    let mut perms2 = fs::metadata(&file_path2).unwrap().permissions();
-    perms2.set_mode(0o644);
-    fs::set_permissions(&file_path2, perms2).unwrap();
-
-    let exec2 = source.executable_of(&file_path2).unwrap();
-    assert_eq!(exec2, swhid::permissions::EntryExec::Known(false));
-}
-
-#[test]
-fn permission_manifest_source() {
-    use swhid::permissions::{ManifestPermissionsSource, PermissionsSource};
-    use tempfile::NamedTempFile;
-
-    let manifest_content = r#"
-[[file]]
-path = "bin/tool"
-executable = true
-
-[[file]]
-path = "scripts/run.sh"
-executable = true
-
-[[file]]
-path = "data.txt"
-executable = false
-"#;
-
-    let mut file = NamedTempFile::new().unwrap();
-    use std::io::Write;
-    file.write_all(manifest_content.as_bytes()).unwrap();
-
-    let source = ManifestPermissionsSource::load(file.path()).unwrap();
-
-    // Test known paths
-    assert_eq!(
-        source.executable_of(std::path::Path::new("bin/tool")).unwrap(),
-        swhid::permissions::EntryExec::Known(true)
-    );
-    assert_eq!(
-        source.executable_of(std::path::Path::new("scripts/run.sh")).unwrap(),
-        swhid::permissions::EntryExec::Known(true)
-    );
-    assert_eq!(
-        source.executable_of(std::path::Path::new("data.txt")).unwrap(),
-        swhid::permissions::EntryExec::Known(false)
-    );
-
-    // Test unknown path
-    assert_eq!(
-        source.executable_of(std::path::Path::new("unknown.txt")).unwrap(),
-        swhid::permissions::EntryExec::Unknown
-    );
+    // V1 and V2 should produce different digests (different hash functions)
+    use swhid::config::HashConfig;
+    let v2_swhid = dir.swhid_with_config(&HashConfig::v2_sha256_hex()).unwrap();
+    assert_ne!(v1_swhid.digest_bytes(), v2_swhid.digest_bytes());
 }

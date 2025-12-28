@@ -49,3 +49,94 @@ fn simple_rev_hash() {
         "swh:1:rev:07cde6575fb633ef9b5ecbe730e6eb97475a2fd9"
     );
 }
+
+#[test]
+fn revision_swhid_v2_all_serializers() {
+    use swhid::config::HashConfig;
+    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+        .unwrap()
+        .try_into()
+        .unwrap();
+
+    let rev = Revision {
+        directory: tree_hash,
+        parents: Vec::new(),
+        author: bs("Test User <test@example.com>"),
+        author_timestamp: 1763027354,
+        author_timestamp_offset: bs("+0100"),
+        committer: bs("Test User <test@example.com>"),
+        committer_timestamp: 1763027354,
+        committer_timestamp_offset: bs("+0100"),
+        extra_headers: Vec::new(),
+        message: Some(bs("Test commit")),
+    };
+
+    // Test all v2 serialization formats
+    let hex_config = HashConfig::v2_sha256_hex();
+    let base64_config = HashConfig::v2_sha256_base64();
+    let base64url_config = HashConfig::v2_sha256_base64url();
+    let base32_config = HashConfig::v2_sha256_base32();
+    let base32hex_config = HashConfig::v2_sha256_base32hex();
+    let z85_config = HashConfig::v2_sha256_z85();
+
+    let hex_swhid = rev.swhid_with_config(&hex_config);
+    let base64_swhid = rev.swhid_with_config(&base64_config);
+    let base64url_swhid = rev.swhid_with_config(&base64url_config);
+    let base32_swhid = rev.swhid_with_config(&base32_config);
+    let base32hex_swhid = rev.swhid_with_config(&base32hex_config);
+    let z85_swhid = rev.swhid_with_config(&z85_config);
+
+    // All should have version 2
+    assert_eq!(hex_swhid.version(), "2");
+    assert_eq!(base64_swhid.version(), "2");
+    assert_eq!(base64url_swhid.version(), "2");
+    assert_eq!(base32_swhid.version(), "2");
+    assert_eq!(base32hex_swhid.version(), "2");
+    assert_eq!(z85_swhid.version(), "2");
+
+    // All should have 32-byte digests (SHA256)
+    assert_eq!(hex_swhid.digest_bytes().len(), 32);
+    assert_eq!(base64_swhid.digest_bytes().len(), 32);
+    assert_eq!(base64url_swhid.digest_bytes().len(), 32);
+    assert_eq!(base32_swhid.digest_bytes().len(), 32);
+    assert_eq!(base32hex_swhid.digest_bytes().len(), 32);
+    assert_eq!(z85_swhid.digest_bytes().len(), 32);
+
+    // All should produce the same digest bytes (same hash function)
+    assert_eq!(hex_swhid.digest_bytes(), base64_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), base64url_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), base32_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), base32hex_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), z85_swhid.digest_bytes());
+}
+
+#[test]
+fn revision_swhid_v1_backward_compatibility() {
+    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+        .unwrap()
+        .try_into()
+        .unwrap();
+
+    let rev = Revision {
+        directory: tree_hash,
+        parents: Vec::new(),
+        author: bs("Test User <test@example.com>"),
+        author_timestamp: 1763027354,
+        author_timestamp_offset: bs("+0100"),
+        committer: bs("Test User <test@example.com>"),
+        committer_timestamp: 1763027354,
+        committer_timestamp_offset: bs("+0100"),
+        extra_headers: Vec::new(),
+        message: Some(bs("Test commit")),
+    };
+
+    // V1 should still work
+    let v1_swhid = rev.swhid();
+    assert_eq!(v1_swhid.version(), "1");
+    assert_eq!(v1_swhid.digest_bytes().len(), 20);
+
+    // V1 and V2 should produce different digests (different hash functions)
+    use swhid::config::HashConfig;
+    let v2_swhid = rev.swhid_with_config(&HashConfig::v2_sha256_hex());
+    assert_ne!(v1_swhid.digest_bytes(), v2_swhid.digest_bytes());
+}

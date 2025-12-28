@@ -109,19 +109,44 @@ impl Swhid {
 
     /// Get the digest as a hex string (backward compatibility).
     ///
-    /// For v1, this returns hex encoding. For v2, this also returns hex
-    /// encoding by default, but the actual format depends on the serializer used.
+    /// This method always returns hex encoding regardless of the SWHID version
+    /// or the serialization format used when creating the SWHID. This ensures
+    /// backward compatibility with code expecting hex strings.
+    ///
+    /// For v1 SWHIDs, this matches the original format. For v2 SWHIDs created
+    /// with different serialization formats (base64, base32, z85, etc.), this
+    /// still returns hex encoding of the digest bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swhid::{Content, config::HashConfig};
+    ///
+    /// let content = Content::from_bytes(b"test");
+    /// let v1_swhid = content.swhid();
+    /// assert_eq!(v1_swhid.digest_hex().len(), 40); // 20 bytes = 40 hex chars
+    ///
+    /// let v2_config = HashConfig::v2_sha256_hex();
+    /// let v2_swhid = content.swhid_with_config(&v2_config);
+    /// assert_eq!(v2_swhid.digest_hex().len(), 64); // 32 bytes = 64 hex chars
+    /// ```
     pub fn digest_hex(&self) -> String {
         HexSerializer::new().encode(&self.digest)
     }
 
-    /// Get the digest as a string using the appropriate serializer for the version.
+    /// Get the digest as a string using hex encoding (for Display compatibility).
     ///
-    /// For v1, uses hex. For v2, uses hex by default (can be extended for other formats).
+    /// This method returns hex encoding for both v1 and v2 SWHIDs. The actual
+    /// serialization format used when creating the SWHID is not stored, so this
+    /// method always uses hex for consistency with the `Display` implementation.
+    ///
+    /// Note: The serialization format specified in `HashConfig` affects how the
+    /// digest is computed and stored, but the `Display` trait and this method
+    /// always use hex encoding for the string representation.
     pub fn digest_string(&self) -> String {
         match self.version.as_str() {
             "1" => HexSerializer::new().encode(&self.digest),
-            "2" => HexSerializer::new().encode(&self.digest), // Default to hex for v2
+            "2" => HexSerializer::new().encode(&self.digest), // Always hex for Display
             _ => HexSerializer::new().encode(&self.digest), // Fallback to hex
         }
     }

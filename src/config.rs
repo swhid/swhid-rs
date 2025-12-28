@@ -4,9 +4,47 @@ use crate::serialization::{DigestSerializer, HexSerializer, Base64Serializer, Ba
 /// Configuration bundling a hash function and serialization format.
 ///
 /// This struct combines a hash function (SHA1, SHA256, etc.) with a
-/// serialization format (hex, base64, etc.) to define how SWHIDs are
+/// serialization format (hex, base64, base32, z85, etc.) to define how SWHIDs are
 /// computed and encoded. This enables SWHID v2 experimentation while
 /// maintaining backward compatibility with v1.
+///
+/// # Serialization Format Compactness
+///
+/// For a 32-byte SHA256 digest, the encoded length varies by format:
+///
+/// | Format     | Length | Use Case                          |
+/// |------------|--------|-----------------------------------|
+/// | hex        | 64     | Default, Git-compatible           |
+/// | base64     | 44     | Standard Base64, compact          |
+/// | base64url  | 43     | URL-safe, no padding              |
+/// | base32     | 52     | RFC 4648 standard                 |
+/// | base32hex  | 52     | Base32hex variant                 |
+/// | z85        | 40     | Most compact, ZeroMQ variant      |
+///
+/// # Examples
+///
+/// ```
+/// use swhid::config::HashConfig;
+/// use swhid::Content;
+///
+/// // V1 (default): SHA1 + hex
+/// let v1_config = HashConfig::v1();
+/// let content = Content::from_bytes(b"Hello");
+/// let v1_swhid = content.swhid_with_config(&v1_config);
+///
+/// // V2 with different serialization formats
+/// let hex_config = HashConfig::v2_sha256_hex();
+/// let base64_config = HashConfig::v2_sha256_base64();
+/// let z85_config = HashConfig::v2_sha256_z85();
+///
+/// // All produce the same digest bytes (same hash function)
+/// let hex_swhid = content.swhid_with_config(&hex_config);
+/// let base64_swhid = content.swhid_with_config(&base64_config);
+/// let z85_swhid = content.swhid_with_config(&z85_config);
+///
+/// assert_eq!(hex_swhid.digest_bytes(), base64_swhid.digest_bytes());
+/// assert_eq!(hex_swhid.digest_bytes(), z85_swhid.digest_bytes());
+/// ```
 pub struct HashConfig {
     pub hash_function: Box<dyn HashFunction>,
     pub serializer: Box<dyn DigestSerializer>,

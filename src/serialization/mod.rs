@@ -12,23 +12,60 @@ use crate::error::SwhidError;
 
 /// Trait for serializing and deserializing hash digests.
 ///
-/// This trait abstracts over different encoding schemes (hex, base64, etc.)
-/// to allow pluggable serialization formats for SWHID v2 experimentation.
+/// This trait abstracts over different encoding schemes to allow pluggable
+/// serialization formats for SWHID v2 experimentation. Supported formats:
+///
+/// - **hex**: Hexadecimal encoding (default for v1, 64 chars for SHA256)
+/// - **base64**: Standard Base64 encoding with padding (44 chars for SHA256)
+/// - **base64url**: URL-safe Base64 without padding (43 chars for SHA256)
+/// - **base32**: RFC 4648 Base32 encoding (52 chars for SHA256)
+/// - **base32hex**: Base32hex variant with alternative character set (52 chars for SHA256)
+/// - **z85**: ZeroMQ Base85 encoding (40 chars for SHA256, most compact)
+///
+/// All serializers support roundtrip encoding/decoding and are suitable for use
+/// in SWHID identifiers. The choice of format depends on requirements for
+/// compactness, URL-safety, and compatibility.
 pub trait DigestSerializer: Send + Sync {
     /// Encode a digest byte array to a string representation.
     ///
     /// The input is a raw digest (e.g., 20 bytes for SHA1, 32 bytes for SHA256).
     /// Returns a string representation suitable for use in SWHID identifiers.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swhid::serialization::{HexSerializer, Base64Serializer, Z85Serializer};
+    ///
+    /// let digest = vec![0u8; 32]; // SHA256 digest
+    /// let hex_encoded = HexSerializer::new().encode(&digest);
+    /// let base64_encoded = Base64Serializer::new().encode(&digest);
+    /// let z85_encoded = Z85Serializer::new().encode(&digest);
+    ///
+    /// assert_eq!(hex_encoded.len(), 64);
+    /// assert_eq!(base64_encoded.len(), 44);
+    /// assert_eq!(z85_encoded.len(), 40);
+    /// ```
     fn encode(&self, digest: &[u8]) -> String;
 
     /// Decode a string representation back to a digest byte array.
     ///
     /// Returns an error if the input is not valid for this serialization format.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swhid::serialization::HexSerializer;
+    ///
+    /// let serializer = HexSerializer::new();
+    /// let encoded = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391";
+    /// let decoded = serializer.decode(encoded).unwrap();
+    /// assert_eq!(decoded.len(), 20);
+    /// ```
     fn decode(&self, encoded: &str) -> Result<Vec<u8>, SwhidError>;
 
     /// Return the name of the serialization format.
     ///
-    /// Examples: "hex", "base64", "base64url"
+    /// Examples: "hex", "base64", "base64url", "base32", "base32hex", "z85"
     fn name(&self) -> &str;
 }
 

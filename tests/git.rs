@@ -324,3 +324,218 @@ fn test_snapshot_swhid() {
         "swh:1:snp:a0bfd8450daaf74c55c2375f21e40745bc5f95b7"
     );
 }
+
+#[test]
+fn test_revision_swhid_v2_with_config() {
+    use swhid::config::HashConfig;
+    let tmp = assert_fs::TempDir::new().unwrap();
+    let repo = Repository::init(tmp.path()).unwrap();
+
+    // Create content
+    let mut index = repo.index().unwrap();
+    let file_path = tmp.child("test.txt");
+    file_path.write_str("test content").unwrap();
+
+    // Create directory
+    index
+        .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
+        .unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+
+    // Create commit
+    let sig = Signature::new("Test User", "test@example.com", &Time::new(1763027354, 60)).unwrap();
+    let commit_oid = repo
+        .commit(
+            Some("refs/heads/main"),
+            &sig,
+            &sig,
+            "Test commit",
+            &tree,
+            &[],
+        )
+        .unwrap();
+
+    // Test v2 with different serialization formats
+    let hex_config = HashConfig::v2_sha256_hex();
+    let base64_config = HashConfig::v2_sha256_base64();
+    let z85_config = HashConfig::v2_sha256_z85();
+
+    let hex_swhid = revision_swhid_with_config(&repo, &commit_oid, &hex_config).unwrap();
+    let base64_swhid = revision_swhid_with_config(&repo, &commit_oid, &base64_config).unwrap();
+    let z85_swhid = revision_swhid_with_config(&repo, &commit_oid, &z85_config).unwrap();
+
+    // All should have version 2
+    assert_eq!(hex_swhid.version(), "2");
+    assert_eq!(base64_swhid.version(), "2");
+    assert_eq!(z85_swhid.version(), "2");
+
+    // All should have 32-byte digests (SHA256)
+    assert_eq!(hex_swhid.digest_bytes().len(), 32);
+    assert_eq!(base64_swhid.digest_bytes().len(), 32);
+    assert_eq!(z85_swhid.digest_bytes().len(), 32);
+
+    // All should produce the same digest bytes (same hash function)
+    assert_eq!(hex_swhid.digest_bytes(), base64_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), z85_swhid.digest_bytes());
+
+    // V1 and V2 should produce different digests
+    let v1_swhid = revision_swhid(&repo, &commit_oid).unwrap();
+    assert_ne!(v1_swhid.digest_bytes(), hex_swhid.digest_bytes());
+}
+
+#[test]
+fn test_release_swhid_v2_with_config() {
+    use swhid::config::HashConfig;
+    let tmp = assert_fs::TempDir::new().unwrap();
+    let repo = Repository::init(tmp.path()).unwrap();
+
+    // Create content
+    let mut index = repo.index().unwrap();
+    let file_path = tmp.child("test.txt");
+    file_path.write_str("test content").unwrap();
+
+    // Create directory
+    index
+        .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
+        .unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+
+    // Create tag
+    let sig = Signature::new("Test User", "test@example.com", &Time::new(1763027354, 60)).unwrap();
+    let tag_oid = repo
+        .tag(
+            "v1.0",
+            &tree.into_object(),
+            &sig,
+            "Test tag",
+            /* force= */ false,
+        )
+        .unwrap();
+
+    // Test v2 with different serialization formats
+    let hex_config = HashConfig::v2_sha256_hex();
+    let base64_config = HashConfig::v2_sha256_base64();
+    let z85_config = HashConfig::v2_sha256_z85();
+
+    let hex_swhid = release_swhid_with_config(&repo, &tag_oid, &hex_config).unwrap();
+    let base64_swhid = release_swhid_with_config(&repo, &tag_oid, &base64_config).unwrap();
+    let z85_swhid = release_swhid_with_config(&repo, &tag_oid, &z85_config).unwrap();
+
+    // All should have version 2
+    assert_eq!(hex_swhid.version(), "2");
+    assert_eq!(base64_swhid.version(), "2");
+    assert_eq!(z85_swhid.version(), "2");
+
+    // All should have 32-byte digests (SHA256)
+    assert_eq!(hex_swhid.digest_bytes().len(), 32);
+    assert_eq!(base64_swhid.digest_bytes().len(), 32);
+    assert_eq!(z85_swhid.digest_bytes().len(), 32);
+
+    // All should produce the same digest bytes (same hash function)
+    assert_eq!(hex_swhid.digest_bytes(), base64_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), z85_swhid.digest_bytes());
+
+    // V1 and V2 should produce different digests
+    let v1_swhid = release_swhid(&repo, &tag_oid).unwrap();
+    assert_ne!(v1_swhid.digest_bytes(), hex_swhid.digest_bytes());
+}
+
+#[test]
+fn test_snapshot_swhid_v2_with_config() {
+    use swhid::config::HashConfig;
+    let tmp = assert_fs::TempDir::new().unwrap();
+    let repo = Repository::init(tmp.path()).unwrap();
+
+    // Create content
+    let mut index = repo.index().unwrap();
+    let file_path = tmp.child("test.txt");
+    file_path.write_str("test content").unwrap();
+
+    // Create directory
+    index
+        .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
+        .unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+
+    // Create commit
+    let sig = Signature::new("Test User", "test@example.com", &Time::new(1763027354, 60)).unwrap();
+    let commit_oid = repo
+        .commit(
+            Some("refs/heads/main"),
+            &sig,
+            &sig,
+            "Test commit",
+            &tree,
+            &[],
+        )
+        .unwrap();
+
+    repo.set_head("refs/heads/main").unwrap();
+
+    // Test v2 with different serialization formats
+    let hex_config = HashConfig::v2_sha256_hex();
+    let base64_config = HashConfig::v2_sha256_base64();
+    let z85_config = HashConfig::v2_sha256_z85();
+
+    let hex_swhid = snapshot_swhid_with_config(&repo, &hex_config).unwrap();
+    let base64_swhid = snapshot_swhid_with_config(&repo, &base64_config).unwrap();
+    let z85_swhid = snapshot_swhid_with_config(&repo, &z85_config).unwrap();
+
+    // All should have version 2
+    assert_eq!(hex_swhid.version(), "2");
+    assert_eq!(base64_swhid.version(), "2");
+    assert_eq!(z85_swhid.version(), "2");
+
+    // All should have 32-byte digests (SHA256)
+    assert_eq!(hex_swhid.digest_bytes().len(), 32);
+    assert_eq!(base64_swhid.digest_bytes().len(), 32);
+    assert_eq!(z85_swhid.digest_bytes().len(), 32);
+
+    // All should produce the same digest bytes (same hash function)
+    assert_eq!(hex_swhid.digest_bytes(), base64_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), z85_swhid.digest_bytes());
+
+    // V1 and V2 should produce different digests
+    let v1_swhid = snapshot_swhid(&repo).unwrap();
+    assert_ne!(v1_swhid.digest_bytes(), hex_swhid.digest_bytes());
+}
+
+#[test]
+fn test_git_hash_algorithm_detection() {
+    let tmp = assert_fs::TempDir::new().unwrap();
+    let repo = Repository::init(tmp.path()).unwrap();
+
+    // SHA1 repositories should be detected correctly
+    let hash_algo = swhid::git::detect_repo_hash_algorithm(&repo).unwrap();
+    assert_eq!(hash_algo, "sha1");
+
+    // Verify that revision_swhid uses the detected algorithm
+    let mut index = repo.index().unwrap();
+    let file_path = tmp.child("test.txt");
+    file_path.write_str("test content").unwrap();
+    index
+        .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
+        .unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+
+    let sig = Signature::new("Test User", "test@example.com", &Time::new(1763027354, 60)).unwrap();
+    let commit_oid = repo
+        .commit(
+            Some("refs/heads/main"),
+            &sig,
+            &sig,
+            "Test commit",
+            &tree,
+            &[],
+        )
+        .unwrap();
+
+    // Should automatically use SHA1 config
+    let swhid = revision_swhid(&repo, &commit_oid).unwrap();
+    assert_eq!(swhid.version(), "1");
+    assert_eq!(swhid.digest_bytes().len(), 20);
+}

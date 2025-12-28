@@ -184,3 +184,98 @@ fn content_swhid_hash_consistency() {
     let swhid2 = content.swhid();
     assert_eq!(swhid1, swhid2);
 }
+
+#[test]
+fn content_swhid_v2_all_serializers() {
+    use swhid::config::HashConfig;
+    let content = Content::from_bytes(b"test data for v2");
+
+    // Test all v2 serialization formats
+    let hex_config = HashConfig::v2_sha256_hex();
+    let base64_config = HashConfig::v2_sha256_base64();
+    let base64url_config = HashConfig::v2_sha256_base64url();
+    let base32_config = HashConfig::v2_sha256_base32();
+    let base32hex_config = HashConfig::v2_sha256_base32hex();
+    let z85_config = HashConfig::v2_sha256_z85();
+
+    let hex_swhid = content.swhid_with_config(&hex_config);
+    let base64_swhid = content.swhid_with_config(&base64_config);
+    let base64url_swhid = content.swhid_with_config(&base64url_config);
+    let base32_swhid = content.swhid_with_config(&base32_config);
+    let base32hex_swhid = content.swhid_with_config(&base32hex_config);
+    let z85_swhid = content.swhid_with_config(&z85_config);
+
+    // All should have version 2
+    assert_eq!(hex_swhid.version(), "2");
+    assert_eq!(base64_swhid.version(), "2");
+    assert_eq!(base64url_swhid.version(), "2");
+    assert_eq!(base32_swhid.version(), "2");
+    assert_eq!(base32hex_swhid.version(), "2");
+    assert_eq!(z85_swhid.version(), "2");
+
+    // All should have 32-byte digests (SHA256)
+    assert_eq!(hex_swhid.digest_bytes().len(), 32);
+    assert_eq!(base64_swhid.digest_bytes().len(), 32);
+    assert_eq!(base64url_swhid.digest_bytes().len(), 32);
+    assert_eq!(base32_swhid.digest_bytes().len(), 32);
+    assert_eq!(base32hex_swhid.digest_bytes().len(), 32);
+    assert_eq!(z85_swhid.digest_bytes().len(), 32);
+
+    // All should produce the same digest bytes (same hash function)
+    assert_eq!(hex_swhid.digest_bytes(), base64_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), base64url_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), base32_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), base32hex_swhid.digest_bytes());
+    assert_eq!(hex_swhid.digest_bytes(), z85_swhid.digest_bytes());
+}
+
+#[test]
+fn content_swhid_v2_compactness() {
+    use swhid::config::HashConfig;
+    let content = Content::from_bytes(b"test data");
+    let swhid = content.swhid_with_config(&HashConfig::v2_sha256_hex());
+    let sha256_digest = swhid.digest_bytes().to_vec();
+
+    // Encode the same digest with different serializers via HashConfig
+    let hex_config = HashConfig::v2_sha256_hex();
+    let base64_config = HashConfig::v2_sha256_base64();
+    let base32_config = HashConfig::v2_sha256_base32();
+    let z85_config = HashConfig::v2_sha256_z85();
+    
+    let hex_encoded = hex_config.serializer.encode(&sha256_digest);
+    let base64_encoded = base64_config.serializer.encode(&sha256_digest);
+    let base32_encoded = base32_config.serializer.encode(&sha256_digest);
+    let z85_encoded = z85_config.serializer.encode(&sha256_digest);
+
+    // Verify compactness ordering: z85 < base64 < base32 < hex
+    // Note: Base32 may have padding, so we check ranges
+    assert_eq!(z85_encoded.len(), 40); // Z85: 32 bytes = 40 chars (exact, no padding)
+    assert!(base64_encoded.len() >= 43 && base64_encoded.len() <= 44); // Base64: 32 bytes = 43-44 chars
+    assert!(base32_encoded.len() >= 52 && base32_encoded.len() <= 56); // Base32: 32 bytes = 52-56 chars (with padding)
+    assert_eq!(hex_encoded.len(), 64); // Hex: 32 bytes = 64 chars (exact)
+    
+    // Verify strict ordering (allowing for padding)
+    assert!(z85_encoded.len() < base64_encoded.len() || z85_encoded.len() == 40);
+    assert!(base64_encoded.len() < base32_encoded.len() || base64_encoded.len() <= 44);
+    assert!(base32_encoded.len() < hex_encoded.len());
+}
+
+#[test]
+fn content_swhid_v1_vs_v2() {
+    use swhid::config::HashConfig;
+    let content = Content::from_bytes(b"Hello, World!");
+
+    let v1_swhid = content.swhid();
+    let v2_swhid = content.swhid_with_config(&HashConfig::v2_sha256_hex());
+
+    // Different versions
+    assert_eq!(v1_swhid.version(), "1");
+    assert_eq!(v2_swhid.version(), "2");
+
+    // Different digest lengths
+    assert_eq!(v1_swhid.digest_bytes().len(), 20); // SHA1
+    assert_eq!(v2_swhid.digest_bytes().len(), 32); // SHA256
+
+    // Different digest values (different hash functions)
+    assert_ne!(v1_swhid.digest_bytes(), v2_swhid.digest_bytes());
+}

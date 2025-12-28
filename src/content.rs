@@ -112,4 +112,38 @@ mod tests {
         assert_eq!(v1_swhid.version(), "1");
         assert_eq!(v2_swhid.version(), "2");
     }
+
+    #[test]
+    fn content_swhid_all_serializers() {
+        let content = Content::from_bytes(b"test data");
+        
+        let hex_config = HashConfig::v2_sha256_hex();
+        let base64_config = HashConfig::v2_sha256_base64();
+        let base64url_config = HashConfig::v2_sha256_base64url();
+        let base32_config = HashConfig::v2_sha256_base32();
+        let base32hex_config = HashConfig::v2_sha256_base32hex();
+        let z85_config = HashConfig::v2_sha256_z85();
+        
+        let hex_swhid = content.swhid_with_config(&hex_config);
+        let base64_swhid = content.swhid_with_config(&base64_config);
+        let base64url_swhid = content.swhid_with_config(&base64url_config);
+        let base32_swhid = content.swhid_with_config(&base32_config);
+        let base32hex_swhid = content.swhid_with_config(&base32hex_config);
+        let z85_swhid = content.swhid_with_config(&z85_config);
+        
+        // All should have the same digest bytes (same hash function)
+        assert_eq!(hex_swhid.digest_bytes(), base64_swhid.digest_bytes());
+        assert_eq!(hex_swhid.digest_bytes(), base64url_swhid.digest_bytes());
+        assert_eq!(hex_swhid.digest_bytes(), base32_swhid.digest_bytes());
+        assert_eq!(hex_swhid.digest_bytes(), base32hex_swhid.digest_bytes());
+        assert_eq!(hex_swhid.digest_bytes(), z85_swhid.digest_bytes());
+        
+        // All should be version 2
+        assert_eq!(hex_swhid.version(), "2");
+        assert_eq!(base64_swhid.version(), "2");
+        assert_eq!(base64url_swhid.version(), "2");
+        assert_eq!(base32_swhid.version(), "2");
+        assert_eq!(base32hex_swhid.version(), "2");
+        assert_eq!(z85_swhid.version(), "2");
+    }
 }
