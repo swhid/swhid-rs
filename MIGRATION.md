@@ -174,16 +174,16 @@ Choose a format based on your needs:
 
 **Before (v1):**
 ```bash
-swhid content README.md
+swhid content --file README.md
 ```
 
 **After (v2):**
 ```bash
 # Explicit v2 with hex (default for v2)
-swhid --version 2 --hash sha256 --serialization hex content README.md
+swhid --version 2 --hash sha256 --serialization hex content --file README.md
 
 # v2 with more compact format
-swhid --version 2 --hash sha256 --serialization base64 content README.md
+swhid --version 2 --hash sha256 --serialization base64 content --file README.md
 ```
 
 ## Backward Compatibility

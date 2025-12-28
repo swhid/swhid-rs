@@ -17,7 +17,7 @@ pub enum SwhidError {
     #[error("invalid object type: {0}")]
     InvalidObjectType(String),
 
-    #[error("invalid digest (expected 40 hex chars): {0}")]
+    #[error("invalid digest: {0}")]
     InvalidDigest(String),
 
     /// Encoding-specific error for serialization format operations.

@@ -22,3 +22,6 @@ Thumbs.db
 
 # Performance test results
 performance_results.txt
+# Review/distribution artifacts
+swhid-rs-review-package.tar.gz
+review-package/

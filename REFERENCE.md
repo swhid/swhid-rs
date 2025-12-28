@@ -560,7 +560,7 @@ swhid git tags --repo /path/to/repo
 
 ## Testing Strategy
 
-The implementation includes 151 comprehensive tests covering:
+The implementation includes 200+ comprehensive tests covering:
 
 - **Unit Tests**: Each module has extensive test coverage
 - **Integration Tests**: End-to-end SWHID operations

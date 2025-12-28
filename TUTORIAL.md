@@ -68,7 +68,7 @@ This is a **v1 content SWHID**:
 Compute a SWHID for a file:
 
 ```bash
-swhid content README.md
+swhid content --file README.md
 ```
 
 **Output**:
@@ -100,16 +100,14 @@ The parse command validates the format and pretty-prints the SWHID.
 echo "test content" | swhid content
 ```
 
-When no file argument is provided, the command automatically reads from stdin. You do not need to use `-` as a filename argument.
-
 **From file**:
 ```bash
-swhid content path/to/file.txt
+swhid content --file path/to/file.txt
 ```
 
 **Binary files**:
 ```bash
-swhid content image.png
+swhid content --file image.png
 ```
 
 SWHIDs work with any file type - text, binary, images, etc.
@@ -127,11 +125,9 @@ This is the default and maintains compatibility with existing SWHID implementati
 
 ### Version 2 with Different Serialization Formats
 
-Version 2 uses SHA256 (32 bytes) with configurable serialization. The same content produces the same digest bytes, but different string representations.
+Version 2 uses SHA256 (32 bytes) with configurable serialization. The same content produces the same digest bytes, but different string representations:
 
-**Important**: Hex is the canonical encoding format for SWHID identifiers. The `Display` trait always uses hex. Alternative formats (base64, base32, z85) are available via `to_string_with()` for presentation, but hex remains the standard.
-
-#### Hex (Canonical Format for v2)
+#### Hex (Default for v2)
 
 ```bash
 echo "Hello" | swhid --version 2 --hash sha256 --serialization hex content
@@ -142,7 +138,6 @@ echo "Hello" | swhid --version 2 --hash sha256 --serialization hex content
 - 64 characters for SHA256
 - Git-compatible
 - Human-readable
-- **Canonical format**: This is the standard encoding used by `Display` and `FromStr`
 
 #### Base64
 
@@ -229,7 +224,7 @@ Use the `verify` command to check if a file matches an expected SWHID:
 
 ```bash
 # Compute and store SWHID
-swhid content important.txt > expected.swhid
+swhid content --file important.txt > expected.swhid
 
 # Later, verify the file hasn't changed
 swhid verify --file important.txt --expected "$(cat expected.swhid)"
@@ -401,14 +396,11 @@ swhid parse 'invalid'
 
 **Choose based on your use case**:
 
-1. **Canonical Format**: Use `hex` (standard, used by Display/FromStr)
-2. **Git Integration**: Use `hex` (matches Git OID format)
-3. **REST APIs**: Use `base64url` (URL-safe, compact) via `to_string_with()`
-4. **Database Storage**: Use `z85` (most compact) via `to_string_with()`
-5. **Human Readability**: Use `hex` (familiar format, canonical)
-6. **Case-Insensitive Systems**: Use `base32` or `base32hex` via `to_string_with()`
-
-**Note**: While alternative formats are available, hex is the canonical format. Use `to_string_with()` to format with alternative serializations, and `parse_with()` to parse them back.
+1. **Git Integration**: Use `hex` (matches Git OID format)
+2. **REST APIs**: Use `base64url` (URL-safe, compact)
+3. **Database Storage**: Use `z85` (most compact, saves space)
+4. **Human Readability**: Use `hex` (familiar format)
+5. **Case-Insensitive Systems**: Use `base32` or `base32hex`
 
 ### Version Selection
 
@@ -498,7 +490,7 @@ fi
 
 ```bash
 # Compute with swhid-rs
-swhid content test.txt > swhid-rs-result.txt
+swhid content --file test.txt > swhid-rs-result.txt
 
 # Compute with Python implementation
 python -c "from swh.model import *; print(Content.from_bytes(open('test.txt', 'rb').read()).swhid())" > python-result.txt
@@ -562,7 +554,7 @@ diff swhid-rs-result.txt python-result.txt
 
 **Content**:
 ```bash
-swhid content [<FILE>]
+swhid content [--file <PATH>]
 ```
 
 **Directory**:

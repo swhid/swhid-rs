@@ -18,8 +18,10 @@ This implementation is **fully compliant** with SWHID v1.2 and provides:
 VCS Integration (optional):
 - Computing `rev`, `rel`, `snp` SWHIDs from VCS metadata (requires `git` feature)
 - Git repository support for revision, release, and snapshot SWHID computation
-- **Current limitation**: Only SHA1 Git repositories are fully supported
-- SHA256 Git repository support is planned but requires architectural changes
+- **Full support for both SHA1 and SHA256 Git repositories** (see [GIT_SHA256_SUPPORT.md](GIT_SHA256_SUPPORT.md) for details)
+- Automatic detection of repository hash algorithm (SHA1 vs SHA256)
+- Supported repository states: normal repos, detached HEAD, empty repos, shallow clones
+- All CLI Git subcommands (`revision`, `release`, `snapshot`, `tags`) work with SHA256 repos
 
 ## Features
 
@@ -107,12 +109,13 @@ println!("V2 base64: {}", hex_swhid.to_string_with(&Base64Serializer::new()));
 println!("V2 z85: {}", hex_swhid.to_string_with(&Z85Serializer::new()));
 
 // Parse non-hex formats using parse_with()
-let base64_str = hex_swhid.to_string_with(&Base64Serializer::new());
-let parsed = Swhid::parse_with(&base64_str, &Base64Serializer::new(), "2").unwrap();
+use swhid::types::SwhidVersion;
+let base64_str = hex_swhid.to_string_with(&Base64Serializer::new()).unwrap();
+let parsed = Swhid::parse_with(&base64_str, &Base64Serializer::new(), SwhidVersion::V2).unwrap();
 assert_eq!(parsed.digest_bytes(), hex_swhid.digest_bytes());
 ```
 
-**Note**: Hex is the canonical encoding format for SWHID identifiers. The `Display` trait and `FromStr` implementation use hex encoding. Alternative serialization formats (base64, base32, z85, etc.) are available via `to_string_with()` and `parse_with()` for presentation purposes, but hex remains the standard format.
+**Important**: Hex is the **canonical encoding format** for SWHID identifiers. The `Display` trait and `FromStr` implementation **always use hex encoding**. Alternative serialization formats (base64, base32, z85, etc.) are available via `to_string_with()` and `parse_with()` for **presentation purposes only**—they do not affect the identifier semantics. The digest bytes are independent of the serialization format used for display.
 
 ### Creating a qualified SWHID
 
@@ -204,6 +207,47 @@ swhid --version 2 --hash sha256 --serialization z85 verify --file README.md --ex
 **Valid combinations:**
 - v1: sha1 + hex (only)
 - v2: sha256 + hex/base64/base64url/base32/base32hex/z85
+
+## Documentation
+
+- **[TUTORIAL.md](TUTORIAL.md)**: Comprehensive user tutorial with CLI examples
+- **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)**: Guide for contributors and developers
+- **[REFERENCE.md](REFERENCE.md)**: Detailed architectural reference
+- **[MIGRATION.md](MIGRATION.md)**: Guide for migrating from v1 to v2
+
+## API Stability
+
+This library follows semantic versioning. The current version is **0.2.0**.
+
+### Stability Guarantees
+
+**Stable APIs (v0.2.0+):**
+- Core SWHID types (`Swhid`, `ObjectType`)
+- Content and Directory object APIs
+- SWHID v1 computation and parsing
+- Qualified SWHID support
+- Git integration (with `git` feature)
+
+**Experimental APIs (subject to change):**
+- SWHID v2 support (SHA256 + multiple serialization formats)
+- `HashConfig` and related v2 APIs
+- Non-hex serialization formats (base64, base32, z85, etc.)
+
+**Deprecated APIs:**
+- `oid_to_array()` - Use `oid_to_vec()` for new code (supports both SHA1 and SHA256)
+
+### Versioning Policy
+
+- **Major version (0.x)**: Breaking changes may occur
+- **Minor version (x.y)**: New features, backward compatible
+- **Patch version (x.y.z)**: Bug fixes, backward compatible
+
+### Migration Path
+
+When upgrading:
+- Check [MIGRATION.md](MIGRATION.md) for v1 to v2 migration guide
+- Review [CHANGELOG.md](CHANGELOG.md) (if available) for breaking changes
+- Run test suite to verify compatibility
 
 ## License
 

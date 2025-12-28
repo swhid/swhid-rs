@@ -2,9 +2,8 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 use swhid::{Content, DiskDirectoryBuilder, WalkOptions};
-use swhid::{QualifiedSwhid, Swhid, ObjectType};
+use swhid::{QualifiedSwhid, Swhid, ObjectType, SwhidVersion};
 use swhid::config::HashConfig;
-use swhid::types::{SwhidVersion, HashAlgorithm, Encoding};
 
 #[cfg(feature = "git")]
 use swhid::git;
@@ -16,13 +15,13 @@ use swhid::git;
 struct Cli {
     /// SWHID version (1 or 2)
     #[arg(long, value_name = "VERSION", default_value = "1")]
-    version: SwhidVersion,
-    /// Hash function (sha1 or sha256). Defaults to sha1 for v1, sha256 for v2.
-    #[arg(long, value_name = "HASH")]
-    hash: Option<HashAlgorithm>,
-    /// Serialization format (hex, base64, base64url, base32, base32hex, or z85). Defaults to hex.
-    #[arg(long, value_name = "FORMAT")]
-    serialization: Option<Encoding>,
+    version: String,
+    /// Hash function (sha1 or sha256)
+    #[arg(long, value_name = "HASH", default_value = "sha1")]
+    hash: String,
+    /// Serialization format (hex, base64, base64url, base32, base32hex, or z85)
+    #[arg(long, value_name = "FORMAT", default_value = "hex")]
+    serialization: String,
     #[command(subcommand)]
     cmd: Command,
 }
@@ -31,8 +30,8 @@ struct Cli {
 enum Command {
     /// Compute a content SWHID from stdin or a file
     Content {
-        /// Path to file (if omitted, reads from stdin automatically; do not use '-' for stdin)
-        #[arg(value_name = "FILE")]
+        /// Path to file (if omitted, read stdin)
+        #[arg(short, long)]
         file: Option<PathBuf>,
     },
     /// Compute a directory SWHID recursively
@@ -101,39 +100,45 @@ enum GitCommand {
     },
 }
 
-fn get_hash_config(version: SwhidVersion, hash: HashAlgorithm, serialization: Encoding) -> Result<HashConfig, Box<dyn std::error::Error>> {
-    // Create appropriate config based on enum values
+fn get_hash_config(version: &str, hash: &str, serialization: &str) -> Result<HashConfig, Box<dyn std::error::Error>> {
+    // Validate version
+    if version != "1" && version != "2" {
+        return Err(format!("Invalid version: {}. Must be 1 or 2", version).into());
+    }
+
+    // Validate hash
+    if hash != "sha1" && hash != "sha256" {
+        return Err(format!("Invalid hash: {}. Must be sha1 or sha256", hash).into());
+    }
+
+    // Validate serialization
+    if serialization != "hex" && serialization != "base64" && serialization != "base64url" 
+        && serialization != "base32" && serialization != "base32hex" && serialization != "z85" {
+        return Err(format!("Invalid serialization: {}. Must be hex, base64, base64url, base32, base32hex, or z85", serialization).into());
+    }
+
+    // Create appropriate config
     match (version, hash, serialization) {
-        (SwhidVersion::V1, HashAlgorithm::Sha1, Encoding::Hex) => Ok(HashConfig::v1()),
-        (SwhidVersion::V2, HashAlgorithm::Sha256, Encoding::Hex) => Ok(HashConfig::v2_sha256_hex()),
-        (SwhidVersion::V2, HashAlgorithm::Sha256, Encoding::Base64) => Ok(HashConfig::v2_sha256_base64()),
-        (SwhidVersion::V2, HashAlgorithm::Sha256, Encoding::Base64Url) => Ok(HashConfig::v2_sha256_base64url()),
-        (SwhidVersion::V2, HashAlgorithm::Sha256, Encoding::Base32) => Ok(HashConfig::v2_sha256_base32()),
-        (SwhidVersion::V2, HashAlgorithm::Sha256, Encoding::Base32Hex) => Ok(HashConfig::v2_sha256_base32hex()),
-        (SwhidVersion::V2, HashAlgorithm::Sha256, Encoding::Z85) => Ok(HashConfig::v2_sha256_z85()),
-        (SwhidVersion::V2, HashAlgorithm::Sha1, Encoding::Hex) => Ok(HashConfig::v1()), // v2 with sha1+hex is same as v1
+        ("1", "sha1", "hex") => Ok(HashConfig::v1()),
+        ("2", "sha256", "hex") => Ok(HashConfig::v2_sha256_hex()),
+        ("2", "sha256", "base64") => Ok(HashConfig::v2_sha256_base64()),
+        ("2", "sha256", "base64url") => Ok(HashConfig::v2_sha256_base64url()),
+        ("2", "sha256", "base32") => Ok(HashConfig::v2_sha256_base32()),
+        ("2", "sha256", "base32hex") => Ok(HashConfig::v2_sha256_base32hex()),
+        ("2", "sha256", "z85") => Ok(HashConfig::v2_sha256_z85()),
+        ("2", "sha1", "hex") => Ok(HashConfig::v1()), // v2 with sha1+hex is same as v1
         _ => Err(format!(
             "Invalid combination: version={}, hash={}, serialization={}. \
             v1 only supports sha1+hex. v2 supports sha256 with hex/base64/base64url/base32/base32hex/z85",
-            version.as_str(), hash.as_str(), serialization.as_str()
+            version, hash, serialization
         ).into()),
     }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    
-    // Resolve defaults based on version
-    let hash = cli.hash.unwrap_or_else(|| {
-        match cli.version {
-            SwhidVersion::V1 => HashAlgorithm::Sha1,
-            SwhidVersion::V2 => HashAlgorithm::Sha256,
-        }
-    });
-    let serialization = cli.serialization.unwrap_or(Encoding::Hex);
-    
-    let config = get_hash_config(cli.version, hash, serialization)?;
-    let use_v2 = cli.version == SwhidVersion::V2;
+    let config = get_hash_config(&cli.version, &cli.hash, &cli.serialization)?;
+    let use_v2 = cli.version == "2";
     
     match cli.cmd {
         Command::Content { file } => {
@@ -303,45 +308,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     git::get_head_commit(&repo)?
                 };
-                let swhid = if use_v2 {
-                    git::revision_swhid_with_config(&repo, &commit_oid, &config)?
-                } else {
-                    git::revision_swhid(&repo, &commit_oid)?
-                };
-                if use_v2 {
-                    println!("{}", swhid.to_string_with(config.serializer.as_ref())?);
-                } else {
-                    println!("{swhid}");
-                }
+                let swhid = git::revision_swhid(&repo, &commit_oid)?;
+                println!("{swhid}");
             }
             GitCommand::Release { repo, tag } => {
                 let repo = git::open_repo(&repo)?;
                 let tag_oid = repo
                     .refname_to_id(&format!("refs/tags/{tag}"))
                     .map_err(|e| format!("Tag not found: {e}"))?;
-                let swhid = if use_v2 {
-                    git::release_swhid_with_config(&repo, &tag_oid, &config)?
-                } else {
-                    git::release_swhid(&repo, &tag_oid)?
-                };
-                if use_v2 {
-                    println!("{}", swhid.to_string_with(config.serializer.as_ref())?);
-                } else {
-                    println!("{swhid}");
-                }
+                let swhid = git::release_swhid(&repo, &tag_oid)?;
+                println!("{swhid}");
             }
             GitCommand::Snapshot { repo } => {
                 let repo = git::open_repo(&repo)?;
-                let swhid = if use_v2 {
-                    git::snapshot_swhid_with_config(&repo, &config)?
-                } else {
-                    git::snapshot_swhid(&repo)?
-                };
-                if use_v2 {
-                    println!("{}", swhid.to_string_with(config.serializer.as_ref())?);
-                } else {
-                    println!("{swhid}");
-                }
+                let swhid = git::snapshot_swhid(&repo)?;
+                println!("{swhid}");
             }
             GitCommand::Tags { repo } => {
                 let repo = git::open_repo(&repo)?;

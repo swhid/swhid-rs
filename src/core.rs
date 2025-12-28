@@ -217,8 +217,9 @@ impl Swhid {
     /// Format the SWHID as a string using the specified serializer.
     ///
     /// This allows formatting a SWHID with a different serialization format
-    /// than the default hex encoding used by `Display`. The digest bytes
-    /// remain the same; only the encoding changes.
+    /// for **presentation purposes only**. **Hex is the canonical format** and is used
+    /// by the `Display` trait. The serialization format does not affect the identifier
+    /// semantics—the digest bytes are independent of the encoding used for display.
     ///
     /// # Examples
     ///
@@ -336,9 +337,10 @@ impl FromStr for Swhid {
 
     /// Parse a SWHID from a string using hex encoding (canonical format).
     ///
-    /// This implementation only supports hex-encoded digests, which is the
-    /// canonical format for SWHID identifiers. To parse SWHIDs with other
-    /// serialization formats, use `Swhid::parse_with()`.
+    /// This implementation only supports hex-encoded digests. **Hex encoding is the
+    /// canonical format** for SWHID identifiers—the encoding does not affect
+    /// the identifier semantics, only how it is represented. To parse SWHIDs with other
+    /// serialization formats (for presentation purposes), use `Swhid::parse_with()`.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Expect: swh:<version>:<tag>:<digest>
         // This implementation only supports hex encoding (canonical format)
