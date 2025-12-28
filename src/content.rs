@@ -1,5 +1,6 @@
 use crate::core::{ObjectType, Swhid};
-use crate::hash::hash_content;
+use crate::hash::{hash_content, hash_content_with};
+use crate::config::HashConfig;
 
 /// SWHID v1.2 content object for computing content SWHIDs.
 ///
@@ -39,5 +40,14 @@ impl<B: AsRef<[u8]>> Content<B> {
     pub fn swhid(&self) -> Swhid {
         let digest = hash_content(self.bytes.as_ref());
         Swhid::new_v1(ObjectType::Content, digest)
+    }
+
+    /// Compute the SWHID content identifier using the specified hash configuration.
+    ///
+    /// This allows computing SWHIDs with different hash functions (SHA1, SHA256, etc.)
+    /// and serialization formats (hex, base64, etc.) for v2 experimentation.
+    pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
+        let digest = hash_content_with(self.bytes.as_ref(), config.hash_function.as_ref());
+        Swhid::new(ObjectType::Content, digest, config.version.clone())
     }
 }

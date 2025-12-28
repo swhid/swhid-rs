@@ -1,5 +1,7 @@
 use crate::utils::HeaderWriter;
 use crate::{Bytestring, Swhid};
+use crate::hash::{hash_swhid_object, hash_swhid_object_with};
+use crate::config::HashConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ReleaseTargetType {
@@ -22,15 +24,29 @@ pub struct Release {
 }
 
 impl Release {
-    /// Compute a SWHID v1.2 revision identifier from a Git commit
+    /// Compute a SWHID v1.2 release identifier from a Git tag
     ///
-    /// This implements the SWHID v1.2 revision hashing algorithm for Git commits,
-    /// creating a `swh:1:rev:<digest>` identifier according to the specification.
+    /// This implements the SWHID v1.2 release hashing algorithm for Git tags,
+    /// creating a `swh:1:rel:<digest>` identifier according to the specification.
     pub fn swhid(&self) -> Swhid {
         let manifest = rel_manifest(self);
-        let digest = crate::hash::hash_swhid_object("tag", &manifest);
+        let digest = hash_swhid_object("tag", &manifest);
 
         Swhid::new_v1(crate::ObjectType::Release, digest)
+    }
+
+    /// Compute the SWHID release identifier using the specified hash configuration.
+    ///
+    /// This allows computing SWHIDs with different hash functions (SHA1, SHA256, etc.)
+    /// and serialization formats (hex, base64, etc.) for v2 experimentation.
+    ///
+    /// Note: This method currently uses the same manifest format as v1, but with
+    /// the specified hash function. The object field still contains [u8; 20] digest
+    /// which is converted to hex for the manifest.
+    pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
+        let manifest = rel_manifest(self);
+        let digest = hash_swhid_object_with("tag", &manifest, config.hash_function.as_ref());
+        Swhid::new(crate::ObjectType::Release, digest, config.version.clone())
     }
 }
 

@@ -1,6 +1,7 @@
 use crate::core::{ObjectType, Swhid};
 use crate::error::SnapshotError;
-use crate::hash::hash_swhid_object;
+use crate::hash::{hash_swhid_object, hash_swhid_object_with};
+use crate::config::HashConfig;
 use crate::utils::check_unique;
 use crate::Bytestring;
 
@@ -64,6 +65,20 @@ impl Snapshot {
             ObjectType::Snapshot,
             hash_swhid_object("snapshot", &manifest),
         )
+    }
+
+    /// Compute the SWHID snapshot identifier using the specified hash configuration.
+    ///
+    /// This allows computing SWHIDs with different hash functions (SHA1, SHA256, etc.)
+    /// and serialization formats (hex, base64, etc.) for v2 experimentation.
+    ///
+    /// Note: This method currently uses the same manifest format as v1, but with
+    /// the specified hash function. The branch target IDs still contain [u8; 20] digests
+    /// which are converted to hex for the manifest.
+    pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
+        let manifest = snp_manifest_unchecked(&self.branches);
+        let digest = hash_swhid_object_with("snapshot", &manifest, config.hash_function.as_ref());
+        Swhid::new(ObjectType::Snapshot, digest, config.version.clone())
     }
 }
 
