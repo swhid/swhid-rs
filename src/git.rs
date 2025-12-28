@@ -8,9 +8,12 @@
 //!
 //! This module implements the SWHID v1.2 specification for VCS objects,
 //! using Git as the reference VCS implementation.
+//!
+//! Also supports SWHID v2 with SHA256 Git repositories.
 
 use crate::error::SwhidError;
 use crate::Swhid;
+use crate::config::HashConfig;
 use std::path::Path;
 
 use git2::{ObjectType as GitObjectType, Repository, Signature};
@@ -24,10 +27,55 @@ fn io_error(msg: String) -> SwhidError {
     SwhidError::Io(std::io::Error::other(msg))
 }
 
-fn oid_to_array(oid: git2::Oid) -> Result<[u8; 20], SwhidError> {
-    oid.as_bytes()
+/// Detect the hash algorithm used by a Git repository.
+///
+/// Returns "sha1" for SHA1 repositories (20-byte OIDs) or "sha256" for SHA256 repositories (32-byte OIDs).
+pub fn detect_repo_hash_algorithm(repo: &Repository) -> Result<&'static str, SwhidError> {
+    // Try to get any object to determine OID size
+    // We'll check HEAD commit if available, or use a different method
+    if let Ok(head) = repo.head() {
+        if let Some(oid) = head.target() {
+            let oid_bytes = oid.as_bytes();
+            match oid_bytes.len() {
+                20 => Ok("sha1"),
+                32 => Ok("sha256"),
+                _ => Err(io_error(format!(
+                    "Unexpected OID length: {} (expected 20 or 32 bytes)",
+                    oid_bytes.len()
+                ))),
+            }
+        } else {
+            // Fallback: assume SHA1 for compatibility
+            Ok("sha1")
+        }
+    } else {
+        // Fallback: assume SHA1 for compatibility
+        Ok("sha1")
+    }
+}
+
+/// Convert a Git OID to a byte array (supports both SHA1 and SHA256).
+///
+/// Returns a Vec<u8> with the OID bytes (20 bytes for SHA1, 32 bytes for SHA256).
+pub fn oid_to_vec(oid: git2::Oid) -> Vec<u8> {
+    oid.as_bytes().to_vec()
+}
+
+/// Convert a Git OID to a 20-byte array (SHA1, backward compatibility).
+///
+/// This function is for backward compatibility with existing code that expects [u8; 20].
+/// For SHA256 repositories, this will return an error.
+pub fn oid_to_array(oid: git2::Oid) -> Result<[u8; 20], SwhidError> {
+    let bytes = oid.as_bytes();
+    if bytes.len() != 20 {
+        return Err(io_error(format!(
+            "Expected 20-byte OID (SHA1), got {} bytes (possibly SHA256 repository)",
+            bytes.len()
+        )));
+    }
+    bytes
         .try_into()
-        .map_err(|e| io_error(format!("Unexpected tree_oid length: {e}")))
+        .map_err(|e| io_error(format!("Unexpected OID conversion error: {e}")))
 }
 
 fn parse_signature(sig: Signature) -> (Bytestring, i64, Bytestring) {
@@ -101,8 +149,29 @@ fn parse_header(mut manifest: &[u8]) -> Result<Vec<(&[u8], Bytestring)>, SwhidEr
 ///
 /// This implements the SWHID v1.2 revision hashing algorithm for Git commits,
 /// creating a `swh:1:rev:<digest>` identifier according to the specification.
+///
+/// Automatically detects the repository's hash algorithm (SHA1 or SHA256) and
+/// uses the appropriate configuration.
 pub fn revision_swhid(repo: &Repository, commit_oid: &git2::Oid) -> Result<Swhid, SwhidError> {
-    revision_from_git(repo, commit_oid).map(|rev| rev.swhid())
+    let hash_algo = detect_repo_hash_algorithm(repo)?;
+    let config = match hash_algo {
+        "sha1" => HashConfig::v1(),
+        "sha256" => HashConfig::v2_sha256_hex(), // Use hex to match Git OID format
+        _ => return Err(io_error(format!("Unsupported hash algorithm: {}", hash_algo))),
+    };
+    revision_swhid_with_config(repo, commit_oid, &config)
+}
+
+/// Compute a SWHID revision identifier from a Git commit using the specified hash configuration.
+///
+/// This allows computing SWHIDs with different hash functions and serialization formats
+/// for v2 experimentation.
+pub fn revision_swhid_with_config(
+    repo: &Repository,
+    commit_oid: &git2::Oid,
+    config: &HashConfig,
+) -> Result<Swhid, SwhidError> {
+    revision_from_git(repo, commit_oid).map(|rev| rev.swhid_with_config(config))
 }
 
 #[doc(hidden)]
@@ -153,8 +222,29 @@ pub fn revision_from_git(
 ///
 /// This implements the SWHID v1.2 release hashing algorithm for Git tags,
 /// creating a `swh:1:rel:<digest>` identifier according to the specification.
+///
+/// Automatically detects the repository's hash algorithm (SHA1 or SHA256) and
+/// uses the appropriate configuration.
 pub fn release_swhid(repo: &Repository, tag_oid: &git2::Oid) -> Result<Swhid, SwhidError> {
-    release_from_git(repo, tag_oid).map(|rel| rel.swhid())
+    let hash_algo = detect_repo_hash_algorithm(repo)?;
+    let config = match hash_algo {
+        "sha1" => HashConfig::v1(),
+        "sha256" => HashConfig::v2_sha256_hex(), // Use hex to match Git OID format
+        _ => return Err(io_error(format!("Unsupported hash algorithm: {}", hash_algo))),
+    };
+    release_swhid_with_config(repo, tag_oid, &config)
+}
+
+/// Compute a SWHID release identifier from a Git tag using the specified hash configuration.
+///
+/// This allows computing SWHIDs with different hash functions and serialization formats
+/// for v2 experimentation.
+pub fn release_swhid_with_config(
+    repo: &Repository,
+    tag_oid: &git2::Oid,
+    config: &HashConfig,
+) -> Result<Swhid, SwhidError> {
+    release_from_git(repo, tag_oid).map(|rel| rel.swhid_with_config(config))
 }
 
 #[doc(hidden)]
@@ -204,8 +294,28 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
 ///
 /// This implements the SWHID v1.2 snapshot hashing algorithm for Git repositories,
 /// creating a `swh:1:snp:<digest>` identifier according to the specification.
+///
+/// Automatically detects the repository's hash algorithm (SHA1 or SHA256) and
+/// uses the appropriate configuration.
 pub fn snapshot_swhid(repo: &Repository) -> Result<Swhid, SwhidError> {
-    snapshot_from_git(repo).map(|snp| snp.swhid())
+    let hash_algo = detect_repo_hash_algorithm(repo)?;
+    let config = match hash_algo {
+        "sha1" => HashConfig::v1(),
+        "sha256" => HashConfig::v2_sha256_hex(), // Use hex to match Git OID format
+        _ => return Err(io_error(format!("Unsupported hash algorithm: {}", hash_algo))),
+    };
+    snapshot_swhid_with_config(repo, &config)
+}
+
+/// Compute a SWHID snapshot identifier from a Git repository using the specified hash configuration.
+///
+/// This allows computing SWHIDs with different hash functions and serialization formats
+/// for v2 experimentation.
+pub fn snapshot_swhid_with_config(
+    repo: &Repository,
+    config: &HashConfig,
+) -> Result<Swhid, SwhidError> {
+    snapshot_from_git(repo).map(|snp| snp.swhid_with_config(config))
 }
 
 #[doc(hidden)]
@@ -337,4 +447,103 @@ pub fn get_tags(repo: &Repository) -> Result<Vec<git2::Oid>, SwhidError> {
     }
 
     Ok(tags)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::HashConfig;
+    use tempfile::TempDir;
+    use std::fs;
+
+    #[test]
+    fn test_detect_repo_hash_algorithm_sha1() {
+        // Create a temporary Git repository
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+        
+        // Initialize a Git repository (defaults to SHA1)
+        let repo = Repository::init(repo_path).unwrap();
+        
+        // Create a test file and commit
+        let sig = Signature::now("Test", "test@example.com").unwrap();
+        let mut index = repo.index().unwrap();
+        let oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(oid).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Test commit", &tree, &[]).unwrap();
+        
+        // Detect hash algorithm
+        let algo = detect_repo_hash_algorithm(&repo).unwrap();
+        assert_eq!(algo, "sha1");
+    }
+
+    #[test]
+    fn test_oid_to_vec() {
+        // Create a test OID (SHA1, 20 bytes)
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+        let repo = Repository::init(repo_path).unwrap();
+        
+        // Create a commit so HEAD exists
+        let sig = Signature::now("Test", "test@example.com").unwrap();
+        let mut index = repo.index().unwrap();
+        let oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(oid).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Test commit", &tree, &[]).unwrap();
+        
+        let head = repo.head().unwrap();
+        let oid = head.target().unwrap();
+        
+        let vec = oid_to_vec(oid);
+        assert_eq!(vec.len(), 20); // SHA1 OID length
+    }
+
+    #[test]
+    fn test_oid_to_array_sha1() {
+        // Create a test OID (SHA1, 20 bytes)
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+        let repo = Repository::init(repo_path).unwrap();
+        
+        // Create a commit so HEAD exists
+        let sig = Signature::now("Test", "test@example.com").unwrap();
+        let mut index = repo.index().unwrap();
+        let oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(oid).unwrap();
+        repo.commit(Some("HEAD"), &sig, &sig, "Test commit", &tree, &[]).unwrap();
+        
+        let head = repo.head().unwrap();
+        let oid = head.target().unwrap();
+        
+        let array = oid_to_array(oid).unwrap();
+        assert_eq!(array.len(), 20);
+    }
+
+    #[test]
+    fn test_revision_swhid_with_config() {
+        // Create a temporary Git repository
+        let temp_dir = TempDir::new().unwrap();
+        let repo_path = temp_dir.path();
+        
+        let repo = Repository::init(repo_path).unwrap();
+        
+        // Create a test file and commit
+        let sig = Signature::now("Test", "test@example.com").unwrap();
+        let mut index = repo.index().unwrap();
+        let oid = index.write_tree().unwrap();
+        let tree = repo.find_tree(oid).unwrap();
+        let commit_oid = repo.commit(Some("HEAD"), &sig, &sig, "Test commit", &tree, &[]).unwrap();
+        
+        // Test v1 config
+        let v1_config = HashConfig::v1();
+        let v1_swhid = revision_swhid_with_config(&repo, &commit_oid, &v1_config).unwrap();
+        assert_eq!(v1_swhid.version(), "1");
+        assert_eq!(v1_swhid.digest_bytes().len(), 20);
+        
+        // Test v2 config (will use SHA256 hash function)
+        let v2_config = HashConfig::v2_sha256_hex();
+        let v2_swhid = revision_swhid_with_config(&repo, &commit_oid, &v2_config).unwrap();
+        assert_eq!(v2_swhid.version(), "2");
+        assert_eq!(v2_swhid.digest_bytes().len(), 32);
+    }
 }
