@@ -11,6 +11,7 @@ pub mod permissions;
 pub mod qualifier;
 pub mod release;
 pub mod revision;
+pub mod serialization;
 pub mod snapshot;
 mod utils;
 
