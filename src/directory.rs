@@ -356,7 +356,7 @@ impl Directory {
     /// is compatible with Git's tree format for directory objects.
     pub fn swhid(&self) -> Result<Swhid, crate::error::SwhidError> {
         let manifest = dir_manifest_unchecked(&self.entries);
-        Ok(Swhid::new(
+        Ok(Swhid::new_v1(
             ObjectType::Directory,
             hash_swhid_object("tree", &manifest),
         ))

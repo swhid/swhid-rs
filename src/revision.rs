@@ -24,7 +24,7 @@ impl Revision {
         let manifest = rev_manifest(self);
         let digest = crate::hash::hash_swhid_object("commit", &manifest);
 
-        Swhid::new(crate::ObjectType::Revision, digest)
+        Swhid::new_v1(crate::ObjectType::Revision, digest)
     }
 }
 
