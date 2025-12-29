@@ -1,4 +1,5 @@
 use crate::utils::HeaderWriter;
+use crate::types::SwhidVersion;
 use crate::{Bytestring, Swhid};
 use crate::hash::{hash_swhid_object, hash_swhid_object_with};
 use crate::config::HashConfig;
@@ -46,7 +47,7 @@ impl Release {
     pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
         let manifest = rel_manifest(self);
         let digest = hash_swhid_object_with("tag", &manifest, config.hash_function.as_ref());
-        Swhid::new(crate::ObjectType::Release, digest, config.version.clone())
+        Swhid::new(crate::ObjectType::Release, digest, config.version)
     }
 }
 
@@ -112,7 +113,7 @@ mod tests {
             message: None,
         };
         let swhid = release.swhid();
-        assert_eq!(swhid.version(), "1");
+        assert_eq!(swhid.version(), SwhidVersion::V1);
         assert_eq!(swhid.digest_bytes().len(), 20);
     }
 
@@ -130,7 +131,7 @@ mod tests {
         };
         let config = HashConfig::v2_sha256_hex();
         let swhid = release.swhid_with_config(&config);
-        assert_eq!(swhid.version(), "2");
+        assert_eq!(swhid.version(), SwhidVersion::V2);
         assert_eq!(swhid.digest_bytes().len(), 32);
     }
 }

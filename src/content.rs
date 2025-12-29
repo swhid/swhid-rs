@@ -1,4 +1,5 @@
 use crate::core::{ObjectType, Swhid};
+use crate::types::SwhidVersion;
 use crate::hash::{hash_content, hash_content_with};
 use crate::config::HashConfig;
 
@@ -48,7 +49,7 @@ impl<B: AsRef<[u8]>> Content<B> {
     /// and serialization formats (hex, base64, etc.) for v2 experimentation.
     pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
         let digest = hash_content_with(self.bytes.as_ref(), config.hash_function.as_ref());
-        Swhid::new(ObjectType::Content, digest, config.version.clone())
+        Swhid::new(ObjectType::Content, digest, config.version)
     }
 }
 
@@ -61,7 +62,7 @@ mod tests {
     fn content_swhid_v1() {
         let content = Content::from_bytes(b"test");
         let swhid = content.swhid();
-        assert_eq!(swhid.version(), "1");
+        assert_eq!(swhid.version(), SwhidVersion::V1);
         assert_eq!(swhid.digest_bytes().len(), 20);
     }
 
@@ -70,7 +71,7 @@ mod tests {
         let content = Content::from_bytes(b"test");
         let config = HashConfig::v1();
         let swhid = content.swhid_with_config(&config);
-        assert_eq!(swhid.version(), "1");
+        assert_eq!(swhid.version(), SwhidVersion::V1);
         assert_eq!(swhid.digest_bytes().len(), 20);
         // Should match regular swhid() for v1
         assert_eq!(swhid.digest_bytes(), content.swhid().digest_bytes());
@@ -81,7 +82,7 @@ mod tests {
         let content = Content::from_bytes(b"test");
         let config = HashConfig::v2_sha256_hex();
         let swhid = content.swhid_with_config(&config);
-        assert_eq!(swhid.version(), "2");
+        assert_eq!(swhid.version(), SwhidVersion::V2);
         assert_eq!(swhid.digest_bytes().len(), 32);
     }
 
@@ -90,7 +91,7 @@ mod tests {
         let content = Content::from_bytes(b"test");
         let config = HashConfig::v2_sha256_base64();
         let swhid = content.swhid_with_config(&config);
-        assert_eq!(swhid.version(), "2");
+        assert_eq!(swhid.version(), SwhidVersion::V2);
         assert_eq!(swhid.digest_bytes().len(), 32);
         // Both base64 and hex configs should produce the same digest (both SHA256)
         // The serializer in config affects how the digest is encoded in the SWHID string,
@@ -109,8 +110,8 @@ mod tests {
         let v2_swhid = content.swhid_with_config(&v2_config);
         
         assert_ne!(v1_swhid.digest_bytes(), v2_swhid.digest_bytes());
-        assert_eq!(v1_swhid.version(), "1");
-        assert_eq!(v2_swhid.version(), "2");
+        assert_eq!(v1_swhid.version(), SwhidVersion::V1);
+        assert_eq!(v2_swhid.version(), SwhidVersion::V2);
     }
 
     #[test]
@@ -139,11 +140,11 @@ mod tests {
         assert_eq!(hex_swhid.digest_bytes(), z85_swhid.digest_bytes());
         
         // All should be version 2
-        assert_eq!(hex_swhid.version(), "2");
-        assert_eq!(base64_swhid.version(), "2");
-        assert_eq!(base64url_swhid.version(), "2");
-        assert_eq!(base32_swhid.version(), "2");
-        assert_eq!(base32hex_swhid.version(), "2");
-        assert_eq!(z85_swhid.version(), "2");
+        assert_eq!(hex_swhid.version(), SwhidVersion::V2);
+        assert_eq!(base64_swhid.version(), SwhidVersion::V2);
+        assert_eq!(base64url_swhid.version(), SwhidVersion::V2);
+        assert_eq!(base32_swhid.version(), SwhidVersion::V2);
+        assert_eq!(base32hex_swhid.version(), SwhidVersion::V2);
+        assert_eq!(z85_swhid.version(), SwhidVersion::V2);
     }
 }

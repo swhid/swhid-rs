@@ -17,6 +17,7 @@ pub mod release;
 pub mod revision;
 pub mod serialization;
 pub mod snapshot;
+pub mod types;
 mod utils;
 
 pub use content::Content;
@@ -31,6 +32,7 @@ pub use qualifier::{ByteRange, LineRange, QualifiedSwhid};
 pub use release::{Release, ReleaseTargetType};
 pub use revision::Revision;
 pub use snapshot::{Branch, BranchTarget, Snapshot};
+pub use types::{Encoding, HashAlgorithm, SwhidVersion};
 
 #[cfg(feature = "serde")]
 pub use serde::{Deserialize, Serialize};

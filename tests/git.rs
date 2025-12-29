@@ -366,9 +366,10 @@ fn test_revision_swhid_v2_with_config() {
     let z85_swhid = revision_swhid_with_config(&repo, &commit_oid, &z85_config).unwrap();
 
     // All should have version 2
-    assert_eq!(hex_swhid.version(), "2");
-    assert_eq!(base64_swhid.version(), "2");
-    assert_eq!(z85_swhid.version(), "2");
+    use swhid::types::SwhidVersion;
+    assert_eq!(hex_swhid.version(), SwhidVersion::V2);
+    assert_eq!(base64_swhid.version(), SwhidVersion::V2);
+    assert_eq!(z85_swhid.version(), SwhidVersion::V2);
 
     // All should have 32-byte digests (SHA256)
     assert_eq!(hex_swhid.digest_bytes().len(), 32);
@@ -424,9 +425,10 @@ fn test_release_swhid_v2_with_config() {
     let z85_swhid = release_swhid_with_config(&repo, &tag_oid, &z85_config).unwrap();
 
     // All should have version 2
-    assert_eq!(hex_swhid.version(), "2");
-    assert_eq!(base64_swhid.version(), "2");
-    assert_eq!(z85_swhid.version(), "2");
+    use swhid::types::SwhidVersion;
+    assert_eq!(hex_swhid.version(), SwhidVersion::V2);
+    assert_eq!(base64_swhid.version(), SwhidVersion::V2);
+    assert_eq!(z85_swhid.version(), SwhidVersion::V2);
 
     // All should have 32-byte digests (SHA256)
     assert_eq!(hex_swhid.digest_bytes().len(), 32);
@@ -485,9 +487,10 @@ fn test_snapshot_swhid_v2_with_config() {
     let z85_swhid = snapshot_swhid_with_config(&repo, &z85_config).unwrap();
 
     // All should have version 2
-    assert_eq!(hex_swhid.version(), "2");
-    assert_eq!(base64_swhid.version(), "2");
-    assert_eq!(z85_swhid.version(), "2");
+    use swhid::types::SwhidVersion;
+    assert_eq!(hex_swhid.version(), SwhidVersion::V2);
+    assert_eq!(base64_swhid.version(), SwhidVersion::V2);
+    assert_eq!(z85_swhid.version(), SwhidVersion::V2);
 
     // All should have 32-byte digests (SHA256)
     assert_eq!(hex_swhid.digest_bytes().len(), 32);

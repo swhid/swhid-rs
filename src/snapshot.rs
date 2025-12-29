@@ -1,4 +1,5 @@
 use crate::core::{ObjectType, Swhid};
+use crate::types::SwhidVersion;
 use crate::error::SnapshotError;
 use crate::hash::{hash_swhid_object, hash_swhid_object_with};
 use crate::config::HashConfig;
@@ -78,7 +79,7 @@ impl Snapshot {
     pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
         let manifest = snp_manifest_unchecked(&self.branches);
         let digest = hash_swhid_object_with("snapshot", &manifest, config.hash_function.as_ref());
-        Swhid::new(ObjectType::Snapshot, digest, config.version.clone())
+        Swhid::new(ObjectType::Snapshot, digest, config.version)
     }
 }
 
@@ -91,7 +92,7 @@ mod tests {
     fn snapshot_swhid_v1() {
         let snapshot = Snapshot::new(vec![]).unwrap();
         let swhid = snapshot.swhid();
-        assert_eq!(swhid.version(), "1");
+        assert_eq!(swhid.version(), SwhidVersion::V1);
         assert_eq!(swhid.digest_bytes().len(), 20);
     }
 
@@ -100,7 +101,7 @@ mod tests {
         let snapshot = Snapshot::new(vec![]).unwrap();
         let config = HashConfig::v2_sha256_hex();
         let swhid = snapshot.swhid_with_config(&config);
-        assert_eq!(swhid.version(), "2");
+        assert_eq!(swhid.version(), SwhidVersion::V2);
         assert_eq!(swhid.digest_bytes().len(), 32);
     }
 }

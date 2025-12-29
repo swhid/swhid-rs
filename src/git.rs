@@ -1,4 +1,5 @@
 //! SWHID v1.2 VCS integration for Git repositories
+use crate::types::SwhidVersion;
 //!
 //! This module provides SWHID v1.2 compliant functionality to compute SWHIDs
 //! from Git repository objects when the `git` feature is enabled:
@@ -537,13 +538,13 @@ mod tests {
         // Test v1 config
         let v1_config = HashConfig::v1();
         let v1_swhid = revision_swhid_with_config(&repo, &commit_oid, &v1_config).unwrap();
-        assert_eq!(v1_swhid.version(), "1");
+        assert_eq!(v1_swhid.version(), SwhidVersion::V1);
         assert_eq!(v1_swhid.digest_bytes().len(), 20);
         
         // Test v2 config (will use SHA256 hash function)
         let v2_config = HashConfig::v2_sha256_hex();
         let v2_swhid = revision_swhid_with_config(&repo, &commit_oid, &v2_config).unwrap();
-        assert_eq!(v2_swhid.version(), "2");
+        assert_eq!(v2_swhid.version(), SwhidVersion::V2);
         assert_eq!(v2_swhid.digest_bytes().len(), 32);
     }
 }

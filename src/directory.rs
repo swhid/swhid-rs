@@ -241,7 +241,7 @@ impl Directory {
     pub fn swhid_with_config(&self, config: &HashConfig) -> Result<Swhid, crate::error::SwhidError> {
         let manifest = dir_manifest_unchecked(&self.entries);
         let digest = hash_swhid_object_with("tree", &manifest, config.hash_function.as_ref());
-        Ok(Swhid::new(ObjectType::Directory, digest, config.version.clone()))
+        Ok(Swhid::new(ObjectType::Directory, digest, config.version))
     }
 }
 

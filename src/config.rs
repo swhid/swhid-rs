@@ -1,5 +1,6 @@
 use crate::hash::{HashFunction, Sha1Hash, Sha256Hash};
 use crate::serialization::{DigestSerializer, HexSerializer, Base64Serializer, Base64UrlSerializer, Base32Serializer, Base32HexSerializer, Z85Serializer};
+use crate::types::{SwhidVersion, HashAlgorithm, Encoding};
 
 /// Configuration bundling a hash function and serialization format.
 ///
@@ -48,21 +49,68 @@ use crate::serialization::{DigestSerializer, HexSerializer, Base64Serializer, Ba
 pub struct HashConfig {
     pub hash_function: Box<dyn HashFunction>,
     pub serializer: Box<dyn DigestSerializer>,
-    pub version: String,
+    pub version: SwhidVersion,
+    pub hash_algorithm: HashAlgorithm,
+    pub encoding: Encoding,
 }
 
 impl HashConfig {
     /// Create a new HashConfig with the specified components.
+    ///
+    /// # Validation
+    ///
+    /// This method validates that the hash function's digest size matches the
+    /// expected size for the specified hash algorithm:
+    /// - SHA1: 20 bytes
+    /// - SHA256: 32 bytes
+    ///
+    /// Returns an error if the digest size doesn't match.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swhid::config::HashConfig;
+    /// use swhid::hash::{HashFunction, Sha1Hash};
+    /// use swhid::serialization::HexSerializer;
+    /// use swhid::types::{SwhidVersion, HashAlgorithm, Encoding};
+    ///
+    /// let hasher = Box::new(Sha1Hash::new());
+    /// let serializer = Box::new(HexSerializer::new());
+    /// let config = HashConfig::new(
+    ///     hasher,
+    ///     serializer,
+    ///     SwhidVersion::V1,
+    ///     HashAlgorithm::Sha1,
+    ///     Encoding::Hex,
+    /// )?;
+    /// # Ok::<(), swhid::SwhidError>(())
+    /// ```
     pub fn new(
         hash_function: Box<dyn HashFunction>,
         serializer: Box<dyn DigestSerializer>,
-        version: String,
-    ) -> Self {
-        Self {
+        version: SwhidVersion,
+        hash_algorithm: HashAlgorithm,
+        encoding: Encoding,
+    ) -> Result<Self, SwhidError> {
+        // Validate digest size matches expected size for hash algorithm
+        let expected_size = match hash_algorithm {
+            HashAlgorithm::Sha1 => 20,
+            HashAlgorithm::Sha256 => 32,
+        };
+        let actual_size = hash_function.digest_size();
+        if actual_size != expected_size {
+            return Err(SwhidError::InvalidDigest(format!(
+                "Hash function digest size {} does not match expected size {} for {}",
+                actual_size, expected_size, hash_algorithm.as_str()
+            )));
+        }
+        Ok(Self {
             hash_function,
             serializer,
             version,
-        }
+            hash_algorithm,
+            encoding,
+        })
     }
 
     /// Create v1 configuration (SHA1 + hex).
@@ -73,8 +121,10 @@ impl HashConfig {
         Self::new(
             Box::new(Sha1Hash::new()),
             Box::new(HexSerializer::new()),
-            "1".to_string(),
-        )
+            SwhidVersion::V1,
+            HashAlgorithm::Sha1,
+            Encoding::Hex,
+        ).expect("v1 config should always be valid")
     }
 
     /// Create v2 configuration with SHA256 + hex.
@@ -85,8 +135,10 @@ impl HashConfig {
         Self::new(
             Box::new(Sha256Hash::new()),
             Box::new(HexSerializer::new()),
-            "2".to_string(),
-        )
+            SwhidVersion::V2,
+            HashAlgorithm::Sha256,
+            Encoding::Hex,
+        ).expect("v2_sha256_hex config should always be valid")
     }
 
     /// Create v2 configuration with SHA256 + base64.
@@ -97,8 +149,10 @@ impl HashConfig {
         Self::new(
             Box::new(Sha256Hash::new()),
             Box::new(Base64Serializer::new()),
-            "2".to_string(),
-        )
+            SwhidVersion::V2,
+            HashAlgorithm::Sha256,
+            Encoding::Base64,
+        ).expect("v2_sha256_base64 config should always be valid")
     }
 
     /// Create v2 configuration with SHA256 + base64url.
@@ -109,8 +163,10 @@ impl HashConfig {
         Self::new(
             Box::new(Sha256Hash::new()),
             Box::new(Base64UrlSerializer::new()),
-            "2".to_string(),
-        )
+            SwhidVersion::V2,
+            HashAlgorithm::Sha256,
+            Encoding::Base64Url,
+        ).expect("v2_sha256_base64url config should always be valid")
     }
 
     /// Create v2 configuration with SHA256 + base32.
@@ -121,8 +177,10 @@ impl HashConfig {
         Self::new(
             Box::new(Sha256Hash::new()),
             Box::new(Base32Serializer::new()),
-            "2".to_string(),
-        )
+            SwhidVersion::V2,
+            HashAlgorithm::Sha256,
+            Encoding::Base32,
+        ).expect("v2_sha256_base32 config should always be valid")
     }
 
     /// Create v2 configuration with SHA256 + base32hex.
@@ -133,8 +191,10 @@ impl HashConfig {
         Self::new(
             Box::new(Sha256Hash::new()),
             Box::new(Base32HexSerializer::new()),
-            "2".to_string(),
-        )
+            SwhidVersion::V2,
+            HashAlgorithm::Sha256,
+            Encoding::Base32Hex,
+        ).expect("v2_sha256_base32hex config should always be valid")
     }
 
     /// Create v2 configuration with SHA256 + z85.
@@ -145,8 +205,10 @@ impl HashConfig {
         Self::new(
             Box::new(Sha256Hash::new()),
             Box::new(Z85Serializer::new()),
-            "2".to_string(),
-        )
+            SwhidVersion::V2,
+            HashAlgorithm::Sha256,
+            Encoding::Z85,
+        ).expect("v2_sha256_z85 config should always be valid")
     }
 }
 
@@ -161,18 +223,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn config_v1() {
-        let config = HashConfig::v1();
-        assert_eq!(config.version, "1");
-        assert_eq!(config.hash_function.name(), "sha1");
-        assert_eq!(config.hash_function.digest_size(), 20);
-        assert_eq!(config.serializer.name(), "hex");
-    }
+            fn config_v1() {
+                let config = HashConfig::v1();
+                assert_eq!(config.version, SwhidVersion::V1);
+                assert_eq!(config.hash_algorithm, HashAlgorithm::Sha1);
+                assert_eq!(config.encoding, Encoding::Hex);
+                assert_eq!(config.hash_function.name(), "sha1");
+                assert_eq!(config.hash_function.digest_size(), 20);
+                assert_eq!(config.serializer.name(), "hex");
+            }
 
     #[test]
     fn config_v2_sha256_hex() {
         let config = HashConfig::v2_sha256_hex();
-        assert_eq!(config.version, "2");
+        assert_eq!(config.version, SwhidVersion::V2);
+        assert_eq!(config.hash_algorithm, HashAlgorithm::Sha256);
+        assert_eq!(config.encoding, Encoding::Hex);
         assert_eq!(config.hash_function.name(), "sha256");
         assert_eq!(config.hash_function.digest_size(), 32);
         assert_eq!(config.serializer.name(), "hex");
@@ -181,7 +247,9 @@ mod tests {
     #[test]
     fn config_v2_sha256_base64() {
         let config = HashConfig::v2_sha256_base64();
-        assert_eq!(config.version, "2");
+        assert_eq!(config.version, SwhidVersion::V2);
+        assert_eq!(config.hash_algorithm, HashAlgorithm::Sha256);
+        assert_eq!(config.encoding, Encoding::Base64);
         assert_eq!(config.hash_function.name(), "sha256");
         assert_eq!(config.hash_function.digest_size(), 32);
         assert_eq!(config.serializer.name(), "base64");
@@ -190,7 +258,9 @@ mod tests {
     #[test]
     fn config_v2_sha256_base64url() {
         let config = HashConfig::v2_sha256_base64url();
-        assert_eq!(config.version, "2");
+        assert_eq!(config.version, SwhidVersion::V2);
+        assert_eq!(config.hash_algorithm, HashAlgorithm::Sha256);
+        assert_eq!(config.encoding, Encoding::Base64Url);
         assert_eq!(config.hash_function.name(), "sha256");
         assert_eq!(config.hash_function.digest_size(), 32);
         assert_eq!(config.serializer.name(), "base64url");
@@ -199,7 +269,8 @@ mod tests {
     #[test]
     fn config_default_is_v1() {
         let config = HashConfig::default();
-        assert_eq!(config.version, "1");
+        assert_eq!(config.version, SwhidVersion::V1);
+        assert_eq!(config.hash_algorithm, HashAlgorithm::Sha1);
         assert_eq!(config.hash_function.name(), "sha1");
     }
 
@@ -255,7 +326,9 @@ mod tests {
     #[test]
     fn config_v2_sha256_base32() {
         let config = HashConfig::v2_sha256_base32();
-        assert_eq!(config.version, "2");
+        assert_eq!(config.version, SwhidVersion::V2);
+        assert_eq!(config.hash_algorithm, HashAlgorithm::Sha256);
+        assert_eq!(config.encoding, Encoding::Base32);
         assert_eq!(config.hash_function.name(), "sha256");
         assert_eq!(config.hash_function.digest_size(), 32);
         assert_eq!(config.serializer.name(), "base32");
@@ -264,7 +337,9 @@ mod tests {
     #[test]
     fn config_v2_sha256_base32hex() {
         let config = HashConfig::v2_sha256_base32hex();
-        assert_eq!(config.version, "2");
+        assert_eq!(config.version, SwhidVersion::V2);
+        assert_eq!(config.hash_algorithm, HashAlgorithm::Sha256);
+        assert_eq!(config.encoding, Encoding::Base32Hex);
         assert_eq!(config.hash_function.name(), "sha256");
         assert_eq!(config.hash_function.digest_size(), 32);
         assert_eq!(config.serializer.name(), "base32hex");
@@ -273,7 +348,9 @@ mod tests {
     #[test]
     fn config_v2_sha256_z85() {
         let config = HashConfig::v2_sha256_z85();
-        assert_eq!(config.version, "2");
+        assert_eq!(config.version, SwhidVersion::V2);
+        assert_eq!(config.hash_algorithm, HashAlgorithm::Sha256);
+        assert_eq!(config.encoding, Encoding::Z85);
         assert_eq!(config.hash_function.name(), "sha256");
         assert_eq!(config.hash_function.digest_size(), 32);
         assert_eq!(config.serializer.name(), "z85");

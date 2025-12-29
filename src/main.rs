@@ -1,11 +1,10 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use swhid::{
-    Content, DirectoryBuildOptions, DiskDirectoryBuilder, PermissionPolicy, PermissionsSourceKind,
-    WalkOptions,
-};
-use swhid::{QualifiedSwhid, Swhid};
+use swhid::{Content, DiskDirectoryBuilder, WalkOptions};
+use swhid::{QualifiedSwhid, Swhid, ObjectType};
+use swhid::config::HashConfig;
+use swhid::types::{SwhidVersion, HashAlgorithm, Encoding};
 
 #[cfg(feature = "git")]
 use swhid::git;
@@ -15,6 +14,15 @@ use swhid::git;
 #[command(name = "swhid")]
 #[command(about = "Compute and parse SWHIDs (ISO/IEC 18670)")]
 struct Cli {
+    /// SWHID version (1 or 2)
+    #[arg(long, value_name = "VERSION", default_value = "1")]
+    version: SwhidVersion,
+    /// Hash function (sha1 or sha256)
+    #[arg(long, value_name = "HASH", default_value = "sha1")]
+    hash: HashAlgorithm,
+    /// Serialization format (hex, base64, base64url, base32, base32hex, or z85)
+    #[arg(long, value_name = "FORMAT", default_value = "hex")]
+    serialization: Encoding,
     #[command(subcommand)]
     cmd: Command,
 }
@@ -37,15 +45,6 @@ enum Command {
         /// Exclude files matching these suffixes (e.g., .tmp, .log)
         #[arg(long, value_name = "SUFFIX")]
         exclude: Vec<String>,
-        /// Permission source (auto, fs, git-index, git-tree, manifest, heuristic)
-        #[arg(long, value_name = "SOURCE", default_value = "auto")]
-        permissions_source: String,
-        /// Permission policy (strict, best-effort)
-        #[arg(long, value_name = "POLICY", default_value = "best-effort")]
-        permissions_policy: String,
-        /// Path to permission manifest file (required when source=manifest)
-        #[arg(long, value_name = "PATH")]
-        permissions_manifest: Option<PathBuf>,
     },
     /// Parse/pretty-print a (qualified) SWHID
     Parse {
@@ -64,15 +63,6 @@ enum Command {
         /// Exclude files matching these suffixes (e.g., .tmp, .log)
         #[arg(long, value_name = "SUFFIX")]
         exclude: Vec<String>,
-        /// Permission source (auto, fs, git-index, git-tree, manifest, heuristic)
-        #[arg(long, value_name = "SOURCE", default_value = "auto")]
-        permissions_source: String,
-        /// Permission policy (strict, best-effort)
-        #[arg(long, value_name = "POLICY", default_value = "best-effort")]
-        permissions_policy: String,
-        /// Path to permission manifest file (required when source=manifest)
-        #[arg(long, value_name = "PATH")]
-        permissions_manifest: Option<PathBuf>,
     },
     /// Git repository SWHID computation (requires --features git)
     #[cfg(feature = "git")]
@@ -111,34 +101,30 @@ enum GitCommand {
     },
 }
 
-fn parse_permissions_source(s: &str) -> Result<PermissionsSourceKind, Box<dyn std::error::Error>> {
-    match s {
-        "auto" => Ok(PermissionsSourceKind::Auto),
-        "fs" | "filesystem" => Ok(PermissionsSourceKind::Filesystem),
-        "git-index" => Ok(PermissionsSourceKind::GitIndex),
-        "git-tree" => Ok(PermissionsSourceKind::GitTree),
-        "manifest" => Ok(PermissionsSourceKind::Manifest),
-        "heuristic" => Ok(PermissionsSourceKind::Heuristic),
+fn get_hash_config(version: SwhidVersion, hash: HashAlgorithm, serialization: Encoding) -> Result<HashConfig, Box<dyn std::error::Error>> {
+    // Create appropriate config based on enum values
+    match (version, hash, serialization) {
+        (SwhidVersion::V1, HashAlgorithm::Sha1, Encoding::Hex) => Ok(HashConfig::v1()),
+        (SwhidVersion::V2, HashAlgorithm::Sha256, Encoding::Hex) => Ok(HashConfig::v2_sha256_hex()),
+        (SwhidVersion::V2, HashAlgorithm::Sha256, Encoding::Base64) => Ok(HashConfig::v2_sha256_base64()),
+        (SwhidVersion::V2, HashAlgorithm::Sha256, Encoding::Base64Url) => Ok(HashConfig::v2_sha256_base64url()),
+        (SwhidVersion::V2, HashAlgorithm::Sha256, Encoding::Base32) => Ok(HashConfig::v2_sha256_base32()),
+        (SwhidVersion::V2, HashAlgorithm::Sha256, Encoding::Base32Hex) => Ok(HashConfig::v2_sha256_base32hex()),
+        (SwhidVersion::V2, HashAlgorithm::Sha256, Encoding::Z85) => Ok(HashConfig::v2_sha256_z85()),
+        (SwhidVersion::V2, HashAlgorithm::Sha1, Encoding::Hex) => Ok(HashConfig::v1()), // v2 with sha1+hex is same as v1
         _ => Err(format!(
-            "Invalid permissions source: {}. Must be auto, fs, git-index, git-tree, manifest, or heuristic",
-            s
-        ).into()),
-    }
-}
-
-fn parse_permissions_policy(s: &str) -> Result<PermissionPolicy, Box<dyn std::error::Error>> {
-    match s {
-        "strict" => Ok(PermissionPolicy::Strict),
-        "best-effort" | "besteffort" => Ok(PermissionPolicy::BestEffort),
-        _ => Err(format!(
-            "Invalid permissions policy: {}. Must be strict or best-effort",
-            s
+            "Invalid combination: version={}, hash={}, serialization={}. \
+            v1 only supports sha1+hex. v2 supports sha256 with hex/base64/base64url/base32/base32hex/z85",
+            version.as_str(), hash.as_str(), serialization.as_str()
         ).into()),
     }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+    let config = get_hash_config(cli.version, cli.hash, cli.serialization)?;
+    let use_v2 = cli.version == SwhidVersion::V2;
+    
     match cli.cmd {
         Command::Content { file } => {
             let bytes = if let Some(p) = file {
@@ -149,38 +135,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 std::io::stdin().read_to_end(&mut buf)?;
                 buf
             };
-            let s = Content::from_bytes(bytes).swhid();
-            println!("{s}");
+            let content = Content::from_bytes(bytes);
+            let swhid = if use_v2 {
+                content.swhid_with_config(&config)
+            } else {
+                content.swhid()
+            };
+            // Use serializer from config for output (P0.1 fix)
+            if use_v2 {
+                println!("{}", swhid.to_string_with(config.serializer.as_ref())?);
+            } else {
+                println!("{swhid}");
+            }
         }
         Command::Dir {
             path,
             follow_symlinks,
             exclude,
-            permissions_source,
-            permissions_policy,
-            permissions_manifest,
         } => {
-            let perm_source = parse_permissions_source(&permissions_source)?;
-            let perm_policy = parse_permissions_policy(&permissions_policy)?;
-
-            if perm_source == PermissionsSourceKind::Manifest && permissions_manifest.is_none() {
-                return Err("--permissions-manifest is required when --permissions-source=manifest".into());
-            }
-
-            let build_opts = DirectoryBuildOptions {
-                permissions_source: perm_source,
-                permissions_policy: perm_policy,
-                permissions_manifest_path: permissions_manifest,
-                walk_options: WalkOptions {
-                    follow_symlinks,
-                    exclude_suffixes: exclude,
-                },
+            let mut opts = WalkOptions {
+                follow_symlinks,
+                ..Default::default()
             };
-
+            opts.exclude_suffixes = exclude;
             let dir = DiskDirectoryBuilder::new(&path)
-                .with_build_options(build_opts);
-            let swhid = dir.swhid()?;
-            println!("{swhid}");
+                .with_options(opts);
+            let swhid = if use_v2 {
+                dir.swhid_with_config(&config)?
+            } else {
+                dir.swhid()?
+            };
+            // Use serializer from config for output (P0.1 fix)
+            if use_v2 {
+                println!("{}", swhid.to_string_with(config.serializer.as_ref())?);
+            } else {
+                println!("{swhid}");
+            }
         }
         Command::Parse { swhid } => {
             // Try qualified first, fallback to core
@@ -197,34 +187,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             swhid,
             follow_symlinks,
             exclude,
-            permissions_source,
-            permissions_policy,
-            permissions_manifest,
         } => {
-            let perm_source = parse_permissions_source(&permissions_source)?;
-            let perm_policy = parse_permissions_policy(&permissions_policy)?;
-
-            if perm_source == PermissionsSourceKind::Manifest && permissions_manifest.is_none() {
-                return Err("--permissions-manifest is required when --permissions-source=manifest".into());
-            }
-
-            let expected: Swhid = swhid.parse()?;
+            // Try to parse with config serializer if v2, otherwise use default hex
+            let expected = if use_v2 {
+                // For v2, try to decode using the config serializer
+                // First try parsing as hex (canonical), then try with config serializer
+                match swhid.parse::<Swhid>() {
+                    Ok(s) => s,
+                    Err(_) => {
+                        // If hex parse fails, try decoding with config serializer
+                        // Extract version, type, and digest from string
+                        let parts: Vec<&str> = swhid.split(':').collect();
+                        if parts.len() == 4 && parts[0] == "swh" && parts[1] == "2" {
+                            let digest_bytes = config.decode_digest(parts[3])?;
+                            Swhid::new(
+                                ObjectType::from_tag(parts[2])?,
+                                digest_bytes,
+                                SwhidVersion::V2,
+                            )
+                        } else {
+                            return Err(format!("Invalid SWHID format: {}", swhid).into());
+                        }
+                    }
+                }
+            } else {
+                swhid.parse::<Swhid>()?
+            };
+            
             let actual = if path.is_file() {
                 let bytes = std::fs::read(&path)?;
-                Content::from_bytes(bytes).swhid()
+                let content = Content::from_bytes(bytes);
+                if use_v2 {
+                    content.swhid_with_config(&config)
+                } else {
+                    content.swhid()
+                }
             } else if path.is_dir() {
-                let build_opts = DirectoryBuildOptions {
-                    permissions_source: perm_source,
-                    permissions_policy: perm_policy,
-                    permissions_manifest_path: permissions_manifest,
-                    walk_options: WalkOptions {
-                        follow_symlinks,
-                        exclude_suffixes: exclude,
-                    },
+                let mut opts = WalkOptions {
+                    follow_symlinks,
+                    ..Default::default()
                 };
+                opts.exclude_suffixes = exclude;
                 let dir = DiskDirectoryBuilder::new(&path)
-                    .with_build_options(build_opts);
-                dir.swhid()?
+                    .with_options(opts);
+                if use_v2 {
+                    dir.swhid_with_config(&config)?
+                } else {
+                    dir.swhid()?
+                }
             } else {
                 eprintln!(
                     "Error: {} is neither a file nor a directory",
@@ -237,17 +247,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!(
                     "✓ Verification successful: {} matches {}",
                     path.display(),
-                    expected
+                    if use_v2 {
+                        actual.to_string_with(config.serializer.as_ref())?
+                    } else {
+                        actual.to_string()
+                    }
                 );
                 std::process::exit(0);
             } else {
                 println!(
                     "✗ Verification failed: {} does not match {}",
                     path.display(),
-                    expected
+                    if use_v2 {
+                        expected.to_string_with(config.serializer.as_ref())?
+                    } else {
+                        expected.to_string()
+                    }
                 );
-                println!("  Expected: {expected}");
-                println!("  Actual:   {actual}");
+                println!(
+                    "  Expected: {}",
+                    if use_v2 {
+                        expected.to_string_with(config.serializer.as_ref())?
+                    } else {
+                        expected.to_string()
+                    }
+                );
+                println!(
+                    "  Actual:   {}",
+                    if use_v2 {
+                        actual.to_string_with(config.serializer.as_ref())?
+                    } else {
+                        actual.to_string()
+                    }
+                );
                 std::process::exit(1);
             }
         }
