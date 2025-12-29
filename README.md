@@ -18,7 +18,8 @@ This implementation is **fully compliant** with SWHID v1.2 and provides:
 VCS Integration (optional):
 - Computing `rev`, `rel`, `snp` SWHIDs from VCS metadata (requires `git` feature)
 - Git repository support for revision, release, and snapshot SWHID computation
-- Support for both SHA1 and SHA256 Git repositories
+- **Current limitation**: Only SHA1 Git repositories are fully supported
+- SHA256 Git repository support is planned but requires architectural changes
 
 ## Features
 
@@ -170,7 +171,7 @@ swhid dir --exclude-suffix .tmp --exclude-suffix .log /path/to/project
 swhid --version 2 --hash sha256 --serialization z85 dir /path/to/project
 
 # VCS SWHIDs (requires --features git)
-# Automatically detects repository hash algorithm (SHA1 or SHA256)
+# Currently supports SHA1 Git repositories only
 swhid git revision --repo /path/to/git/repo
 swhid git release --repo /path/to/git/repo --tag v1.0.0
 swhid git snapshot --repo /path/to/git/repo

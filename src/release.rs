@@ -14,7 +14,8 @@ pub enum ReleaseTargetType {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Release {
-    pub object: [u8; 20],
+    /// Target object digest (20 bytes for SHA1, 32 bytes for SHA256)
+    pub object: Vec<u8>,
     pub object_type: ReleaseTargetType,
     pub name: Bytestring,
     pub author: Option<Bytestring>,
@@ -41,9 +42,8 @@ impl Release {
     /// This allows computing SWHIDs with different hash functions (SHA1, SHA256, etc.)
     /// and serialization formats (hex, base64, etc.) for v2 experimentation.
     ///
-    /// Note: This method currently uses the same manifest format as v1, but with
-    /// the specified hash function. The object field still contains [u8; 20] digest
-    /// which is converted to hex for the manifest.
+    /// This method uses the same manifest format as v1, but with the specified hash function.
+    /// The object field contains a variable-length digest which is converted to hex for the manifest.
     pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
         let manifest = rel_manifest(self);
         let digest = hash_swhid_object_with("tag", &manifest, config.hash_function.as_ref());
@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn release_swhid_v1() {
         let release = Release {
-            object: [0u8; 20],
+            object: vec![0u8; 20],
             object_type: ReleaseTargetType::Revision,
             name: b"v1.0.0".as_ref().into(),
             author: None,
@@ -120,7 +120,7 @@ mod tests {
     #[test]
     fn release_swhid_with_config_v2() {
         let release = Release {
-            object: [0u8; 20],
+            object: vec![0u8; 20],
             object_type: ReleaseTargetType::Revision,
             name: b"v1.0.0".as_ref().into(),
             author: None,

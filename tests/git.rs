@@ -12,10 +12,8 @@ fn bs(s: &'static str) -> Box<[u8]> {
     s.as_bytes().into()
 }
 
-fn oid_to_array(oid: git2::Oid) -> [u8; 20] {
-    oid.as_bytes()
-        .try_into()
-        .expect("Unexpected tree_oid length")
+fn oid_to_vec(oid: git2::Oid) -> Vec<u8> {
+    oid.as_bytes().to_vec()
 }
 
 #[test]
@@ -34,10 +32,8 @@ fn test_revision_swhid() {
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
-        .unwrap()
-        .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(tree_oid), tree_hash);
+    assert_eq!(oid_to_vec(tree_oid), tree_hash);
     let tree = repo.find_tree(tree_oid).unwrap();
 
     // Create commit
@@ -102,10 +98,8 @@ fn test_signed_revision_swhid() {
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
-        .unwrap()
-        .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(tree_oid), tree_hash);
+    assert_eq!(oid_to_vec(tree_oid), tree_hash);
     let tree = repo.find_tree(tree_oid).unwrap();
 
     // Create commit
@@ -171,10 +165,8 @@ fn test_release_swhid() {
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
-        .unwrap()
-        .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(tree_oid), tree_hash);
+    assert_eq!(oid_to_vec(tree_oid), tree_hash);
     let tree = repo.find_tree(tree_oid).unwrap();
 
     // Create tag
@@ -236,10 +228,8 @@ fn test_snapshot_swhid() {
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
     let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
-        .unwrap()
-        .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(tree_oid), tree_hash);
+    assert_eq!(oid_to_vec(tree_oid), tree_hash);
     let tree = repo.find_tree(tree_oid).unwrap();
 
     // Add reference directly to a tree
@@ -264,10 +254,8 @@ fn test_snapshot_swhid() {
         )
         .unwrap();
     let commit_hash = hex::decode("07cde6575fb633ef9b5ecbe730e6eb97475a2fd9")
-        .unwrap()
-        .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(commit_oid), commit_hash);
+    assert_eq!(oid_to_vec(commit_oid), commit_hash);
 
     // Create tag
     let tag_oid = repo
@@ -280,10 +268,8 @@ fn test_snapshot_swhid() {
         )
         .unwrap();
     let tag_hash = hex::decode("46d326edb8bfc49b757ccd09930365595806bfc0")
-        .unwrap()
-        .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(tag_oid), tag_hash);
+    assert_eq!(oid_to_vec(tag_oid), tag_hash);
 
     repo.set_head("refs/heads/main").unwrap();
 
@@ -538,7 +524,8 @@ fn test_git_hash_algorithm_detection() {
         .unwrap();
 
     // Should automatically use SHA1 config
+    use swhid::types::SwhidVersion;
     let swhid = revision_swhid(&repo, &commit_oid).unwrap();
-    assert_eq!(swhid.version(), "1");
+    assert_eq!(swhid.version(), SwhidVersion::V1);
     assert_eq!(swhid.digest_bytes().len(), 20);
 }

@@ -6,8 +6,10 @@ use crate::config::HashConfig;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Revision {
-    pub directory: [u8; 20],
-    pub parents: Vec<[u8; 20]>,
+    /// Directory/tree digest (20 bytes for SHA1, 32 bytes for SHA256)
+    pub directory: Vec<u8>,
+    /// Parent commit digests (20 bytes for SHA1, 32 bytes for SHA256)
+    pub parents: Vec<Vec<u8>>,
     pub author: Bytestring,
     pub author_timestamp: i64,
     pub author_timestamp_offset: Bytestring,
@@ -35,9 +37,9 @@ impl Revision {
     /// This allows computing SWHIDs with different hash functions (SHA1, SHA256, etc.)
     /// and serialization formats (hex, base64, etc.) for v2 experimentation.
     ///
-    /// Note: This method currently uses the same manifest format as v1, but with
-    /// the specified hash function. The directory and parents fields still contain
-    /// [u8; 20] digests which are converted to hex for the manifest.
+    /// This method uses the same manifest format as v1, but with the specified hash function.
+    /// The directory and parents fields contain variable-length digests which are converted
+    /// to hex for the manifest.
     pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
         let manifest = rev_manifest(self);
         let digest = hash_swhid_object_with("commit", &manifest, config.hash_function.as_ref());
@@ -93,7 +95,7 @@ mod tests {
     #[test]
     fn revision_swhid_v1() {
         let rev = Revision {
-            directory: [0u8; 20],
+            directory: vec![0u8; 20],
             parents: vec![],
             author: b"Test Author".as_ref().into(),
             author_timestamp: 1234567890,
@@ -112,7 +114,7 @@ mod tests {
     #[test]
     fn revision_swhid_with_config_v2() {
         let rev = Revision {
-            directory: [0u8; 20],
+            directory: vec![0u8; 20],
             parents: vec![],
             author: b"Test Author".as_ref().into(),
             author_timestamp: 1234567890,

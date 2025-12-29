@@ -293,21 +293,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     git::get_head_commit(&repo)?
                 };
-                let swhid = git::revision_swhid(&repo, &commit_oid)?;
-                println!("{swhid}");
+                let swhid = if use_v2 {
+                    git::revision_swhid_with_config(&repo, &commit_oid, &config)?
+                } else {
+                    git::revision_swhid(&repo, &commit_oid)?
+                };
+                if use_v2 {
+                    println!("{}", swhid.to_string_with(config.serializer.as_ref())?);
+                } else {
+                    println!("{swhid}");
+                }
             }
             GitCommand::Release { repo, tag } => {
                 let repo = git::open_repo(&repo)?;
                 let tag_oid = repo
                     .refname_to_id(&format!("refs/tags/{tag}"))
                     .map_err(|e| format!("Tag not found: {e}"))?;
-                let swhid = git::release_swhid(&repo, &tag_oid)?;
-                println!("{swhid}");
+                let swhid = if use_v2 {
+                    git::release_swhid_with_config(&repo, &tag_oid, &config)?
+                } else {
+                    git::release_swhid(&repo, &tag_oid)?
+                };
+                if use_v2 {
+                    println!("{}", swhid.to_string_with(config.serializer.as_ref())?);
+                } else {
+                    println!("{swhid}");
+                }
             }
             GitCommand::Snapshot { repo } => {
                 let repo = git::open_repo(&repo)?;
-                let swhid = git::snapshot_swhid(&repo)?;
-                println!("{swhid}");
+                let swhid = if use_v2 {
+                    git::snapshot_swhid_with_config(&repo, &config)?
+                } else {
+                    git::snapshot_swhid(&repo)?
+                };
+                if use_v2 {
+                    println!("{}", swhid.to_string_with(config.serializer.as_ref())?);
+                } else {
+                    println!("{swhid}");
+                }
             }
             GitCommand::Tags { repo } => {
                 let repo = git::open_repo(&repo)?;

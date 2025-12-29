@@ -8,11 +8,16 @@ use crate::Bytestring;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BranchTarget {
-    Content(Option<[u8; 20]>),
-    Directory(Option<[u8; 20]>),
-    Revision(Option<[u8; 20]>),
-    Release(Option<[u8; 20]>),
-    Snapshot(Option<[u8; 20]>),
+    /// Content digest (20 bytes for SHA1, 32 bytes for SHA256)
+    Content(Option<Vec<u8>>),
+    /// Directory digest (20 bytes for SHA1, 32 bytes for SHA256)
+    Directory(Option<Vec<u8>>),
+    /// Revision digest (20 bytes for SHA1, 32 bytes for SHA256)
+    Revision(Option<Vec<u8>>),
+    /// Release digest (20 bytes for SHA1, 32 bytes for SHA256)
+    Release(Option<Vec<u8>>),
+    /// Snapshot digest (20 bytes for SHA1, 32 bytes for SHA256)
+    Snapshot(Option<Vec<u8>>),
     Alias(Option<Bytestring>),
 }
 
@@ -23,7 +28,7 @@ impl BranchTarget {
             | BranchTarget::Directory(id)
             | BranchTarget::Revision(id)
             | BranchTarget::Release(id)
-            | BranchTarget::Snapshot(id) => id.as_ref().map(AsRef::as_ref).unwrap_or(b""),
+            | BranchTarget::Snapshot(id) => id.as_deref().unwrap_or(b""),
             BranchTarget::Alias(id) => id.as_ref().map(AsRef::as_ref).unwrap_or(b""),
         }
     }

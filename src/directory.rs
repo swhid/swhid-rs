@@ -7,7 +7,7 @@ use std::path::Path;
 
 use crate::core::{ObjectType, Swhid};
 use crate::error::DirectoryError;
-use crate::hash::{hash_content, hash_swhid_object, hash_swhid_object_with};
+use crate::hash::{hash_content, hash_content_with, hash_swhid_object, hash_swhid_object_with};
 use crate::config::HashConfig;
 use crate::utils::check_unique;
 
@@ -32,12 +32,12 @@ pub struct Entry {
     name: Box<[u8]>,
     /// SWHID v1.2 tree mode (compatible with Git tree mode)
     mode: u32,
-    /// SWHID object id
-    id: [u8; 20],
+    /// SWHID object id (20 bytes for SHA1, 32 bytes for SHA256)
+    id: Vec<u8>,
 }
 
 impl Entry {
-    pub fn new(name: Box<[u8]>, mode: u32, id: [u8; 20]) -> Entry {
+    pub fn new(name: Box<[u8]>, mode: u32, id: Vec<u8>) -> Entry {
         Self { name, mode, id }
     }
 
@@ -141,7 +141,7 @@ fn symlink_mode() -> u32 {
     0o120000
 }
 
-fn read_dir(path: &Path, opts: &WalkOptions) -> io::Result<Vec<Entry>> {
+fn read_dir(path: &Path, opts: &WalkOptions, hash_config: Option<&HashConfig>) -> io::Result<Vec<Entry>> {
     let mut children: Vec<Entry> = Vec::new();
     for entry in fs::read_dir(path)? {
         let entry = entry?;
@@ -160,11 +160,14 @@ fn read_dir(path: &Path, opts: &WalkOptions) -> io::Result<Vec<Entry>> {
         let ft = md.file_type();
 
         if ft.is_dir() {
-            let id = hash_swhid_object(
-                "tree",
-                &dir_manifest(read_dir(&entry.path(), opts)?)
-                    .map_err(|e: DirectoryError| io::Error::other(e))?,
-            );
+            let nested_entries = read_dir(&entry.path(), opts, hash_config)?;
+            let manifest = dir_manifest(nested_entries)
+                .map_err(|e: DirectoryError| io::Error::other(e))?;
+            let id = if let Some(config) = hash_config {
+                hash_swhid_object_with("tree", &manifest, config.hash_function.as_ref())
+            } else {
+                hash_swhid_object("tree", &manifest).to_vec()
+            };
             children.push(Entry {
                 name: name_bytes,
                 mode: 0o040000,
@@ -174,7 +177,11 @@ fn read_dir(path: &Path, opts: &WalkOptions) -> io::Result<Vec<Entry>> {
             // The content is the link target bytes
             let target = fs::read_link(entry.path())?;
             let bytes = target.as_os_str().as_encoded_bytes();
-            let id = hash_content(bytes);
+            let id = if let Some(config) = hash_config {
+                hash_content_with(bytes, config.hash_function.as_ref())
+            } else {
+                hash_content(bytes).to_vec()
+            };
             children.push(Entry {
                 name: name_bytes,
                 mode: symlink_mode(),
@@ -182,7 +189,11 @@ fn read_dir(path: &Path, opts: &WalkOptions) -> io::Result<Vec<Entry>> {
             });
         } else if ft.is_file() {
             let bytes = fs::read(entry.path())?;
-            let id = hash_content(&bytes);
+            let id = if let Some(config) = hash_config {
+                hash_content_with(&bytes, config.hash_function.as_ref())
+            } else {
+                hash_content(&bytes).to_vec()
+            };
             let mode = path_file_mode(&md);
             children.push(Entry {
                 name: name_bytes,
@@ -269,7 +280,7 @@ impl<'a> DiskDirectoryBuilder<'a> {
     }
 
     pub fn build(self) -> Result<Directory, io::Error> {
-        Directory::new(read_dir(self.root, &self.opts)?)
+        Directory::new(read_dir(self.root, &self.opts, None)?)
             .map_err(|e: DirectoryError| io::Error::other(e))
     }
 
@@ -278,9 +289,20 @@ impl<'a> DiskDirectoryBuilder<'a> {
     /// This implements the SWHID v1.2 directory hashing algorithm, which
     /// is compatible with Git's tree format for directory objects.
     pub fn swhid(&self) -> Result<Swhid, crate::error::SwhidError> {
-        let entries = read_dir(self.root, &self.opts).map_err(crate::error::SwhidError::Io)?;
+        let entries = read_dir(self.root, &self.opts, None).map_err(crate::error::SwhidError::Io)?;
         Directory::new(entries)
             .map_err(|e| crate::error::SwhidError::Io(std::io::Error::other(e)))?
             .swhid()
+    }
+
+    /// Compute the SWHID directory identifier using the specified hash configuration.
+    ///
+    /// This allows computing SWHIDs with different hash functions (SHA1, SHA256, etc.)
+    /// and serialization formats (hex, base64, etc.) for v2 experimentation.
+    pub fn swhid_with_config(&self, config: &HashConfig) -> Result<Swhid, crate::error::SwhidError> {
+        let entries = read_dir(self.root, &self.opts, Some(config)).map_err(crate::error::SwhidError::Io)?;
+        Directory::new(entries)
+            .map_err(|e| crate::error::SwhidError::Io(std::io::Error::other(e)))?
+            .swhid_with_config(config)
     }
 }

@@ -175,7 +175,7 @@ mod tests {
         // The decode might succeed but produce garbage, or it might fail
         // Let's test with a character that's definitely not in Z85 charset
         let invalid_encoded2 = "abc\nx"; // Contains newline
-        let result2 = serializer.decode(invalid_encoded2);
+        let _result2 = serializer.decode(invalid_encoded2);
         // At least one should fail, or we need to check the actual behavior
         // For now, let's just verify that invalid length fails (which we know works)
         assert!(serializer.decode("abc").is_err()); // 3 chars, not multiple of 5
