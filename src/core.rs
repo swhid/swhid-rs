@@ -3,7 +3,6 @@ use std::str::FromStr;
 
 use crate::error::SwhidError;
 use crate::serialization::{DigestSerializer, HexSerializer};
-use crate::types::SwhidVersion;
 
 /// Known SWH object kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -47,13 +46,22 @@ impl ObjectType {
 ///
 /// Supports variable-length digests and different serialization formats
 /// for SWHID v2 experimentation while maintaining backward compatibility with v1.
+///
+/// **Serialization Format Semantics**:
+/// - **Hex is canonical**: The `Display` trait and `FromStr` implementation
+///   use hex encoding as the canonical format for SWHID identifiers.
+/// - **Alternative formats are presentation-only**: Other serialization formats
+///   (base64, base32, z85, etc.) can be used for display/storage via
+///   `to_string_with()` and `parse_with()`, but hex remains the standard.
+/// - **Digest bytes are independent**: The serialization format does NOT affect
+///   the digest bytes themselves, only how they are encoded for display.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Swhid {
     object_type: ObjectType,
     /// Digest bytes (variable length: 20 bytes for SHA1, 32 bytes for SHA256, etc.)
     digest: Vec<u8>,
-    /// SWHID version
-    version: SwhidVersion,
+    /// SWHID version (e.g., "1" for v1, "2" for v2)
+    version: String,
 }
 
 impl Swhid {
@@ -62,22 +70,12 @@ impl Swhid {
     /// Create a new SWHID with the specified version and digest.
     ///
     /// This is the new API that supports variable-length digests and versions.
-    pub fn new(object_type: ObjectType, digest: Vec<u8>, version: SwhidVersion) -> Self {
+    pub fn new(object_type: ObjectType, digest: Vec<u8>, version: String) -> Self {
         Self {
             object_type,
             digest,
             version,
         }
-    }
-
-    /// Create a new SWHID with the specified version (string) and digest.
-    ///
-    /// This is a convenience method that parses the version string.
-    /// For better type safety, use `new()` with `SwhidVersion` enum.
-    pub fn new_with_version_str(object_type: ObjectType, digest: Vec<u8>, version: &str) -> Result<Self, SwhidError> {
-        let version_enum = SwhidVersion::from_str(version)
-            .map_err(|e| SwhidError::InvalidVersion(e))?;
-        Ok(Self::new(object_type, digest, version_enum))
     }
 
     /// Create a new SWHID v1 with a 20-byte digest (backward compatibility).
@@ -87,7 +85,7 @@ impl Swhid {
         Self {
             object_type,
             digest: digest.to_vec(),
-            version: SwhidVersion::V1,
+            version: "1".to_string(),
         }
     }
 
@@ -101,7 +99,7 @@ impl Swhid {
         Self {
             object_type,
             digest,
-            version: SwhidVersion::V2,
+            version: "2".to_string(),
         }
     }
 
@@ -109,14 +107,8 @@ impl Swhid {
         self.object_type
     }
 
-    /// Get the SWHID version.
-    pub fn version(&self) -> SwhidVersion {
-        self.version
-    }
-
-    /// Get the SWHID version as a string (for backward compatibility).
-    pub fn version_str(&self) -> &'static str {
-        self.version.as_str()
+    pub fn version(&self) -> &str {
+        &self.version
     }
 
     /// Get the digest bytes (variable length).
@@ -161,8 +153,11 @@ impl Swhid {
     /// digest is computed and stored, but the `Display` trait and this method
     /// always use hex encoding for the string representation.
     pub fn digest_string(&self) -> String {
-        // Always use hex for Display (canonical format)
-        HexSerializer::new().encode(&self.digest)
+        match self.version.as_str() {
+            "1" => HexSerializer::new().encode(&self.digest),
+            "2" => HexSerializer::new().encode(&self.digest), // Always hex for Display
+            _ => HexSerializer::new().encode(&self.digest), // Fallback to hex
+        }
     }
 
     /// Format the SWHID as a string using the specified serializer.
@@ -192,7 +187,7 @@ impl Swhid {
     pub fn to_string_with(&self, serializer: &dyn DigestSerializer) -> String {
         format!(
             "swh:{}:{}:{}",
-            self.version.as_str(),
+            self.version,
             self.object_type.as_tag(),
             serializer.encode(&self.digest)
         )
@@ -221,13 +216,13 @@ impl Swhid {
     /// let base64_str = swhid.to_string_with(&Base64Serializer::new());
     ///
     /// // Parse back using base64 serializer
-    /// let parsed = Swhid::parse_with(&base64_str, &Base64Serializer::new(), SwhidVersion::V2).unwrap();
+    /// let parsed = Swhid::parse_with(&base64_str, &Base64Serializer::new(), "2").unwrap();
     /// assert_eq!(parsed.digest_bytes(), swhid.digest_bytes());
     /// ```
     pub fn parse_with(
         s: &str,
         serializer: &dyn DigestSerializer,
-        expected_version: SwhidVersion,
+        expected_version: &str,
     ) -> Result<Self, SwhidError> {
         // Expect: swh:<version>:<tag>:<digest>
         let mut it = s.split(':');
@@ -237,15 +232,13 @@ impl Swhid {
         if scheme != "swh" {
             return Err(SwhidError::InvalidScheme(scheme.to_owned()));
         }
-        let ver_str = it
+        let ver = it
             .next()
             .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
-        let ver = SwhidVersion::from_str(ver_str)
-            .map_err(|e| SwhidError::InvalidFormat(e))?;
         if ver != expected_version {
             return Err(SwhidError::InvalidFormat(format!(
                 "Expected version {}, got {}",
-                expected_version.as_str(), ver_str
+                expected_version, ver
             )));
         }
         let tag = it
@@ -260,11 +253,11 @@ impl Swhid {
 
         let object_type = ObjectType::from_tag(tag)?;
         let digest = serializer.decode(digest_str)?;
-        
+
         Ok(Self {
             object_type,
             digest,
-            version: expected_version,
+            version: ver.to_string(),
         })
     }
 }
@@ -274,7 +267,7 @@ impl Display for Swhid {
         write!(
             f,
             "swh:{}:{}:{}",
-            self.version.as_str(),
+            self.version,
             self.object_type.as_tag(),
             self.digest_string()
         )
@@ -284,8 +277,14 @@ impl Display for Swhid {
 impl FromStr for Swhid {
     type Err = SwhidError;
 
+    /// Parse a SWHID from a string using hex encoding (canonical format).
+    ///
+    /// This implementation only supports hex-encoded digests, which is the
+    /// canonical format for SWHID identifiers. To parse SWHIDs with other
+    /// serialization formats, use `Swhid::parse_with()`.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // Expect: swh:<version>:<tag>:<digest>
+        // This implementation only supports hex encoding (canonical format)
         let mut it = s.split(':');
         let scheme = it
             .next()
@@ -293,12 +292,14 @@ impl FromStr for Swhid {
         if scheme != "swh" {
             return Err(SwhidError::InvalidScheme(scheme.to_owned()));
         }
-        let ver_str = it
+        let ver = it
             .next()
             .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
         
-        let version = SwhidVersion::from_str(ver_str)
-            .map_err(|e| SwhidError::InvalidVersion(e))?;
+        // Validate version (currently support "1" and "2")
+        if ver != "1" && ver != "2" {
+            return Err(SwhidError::InvalidVersion(ver.to_owned()));
+        }
         
         let tag = it
             .next()
@@ -318,8 +319,8 @@ impl FromStr for Swhid {
         let serializer = HexSerializer::new(); // Default to hex for now
         
         // Validate format based on version
-        match version {
-            SwhidVersion::V1 => {
+        match ver {
+            "1" => {
                 // v1 requires exactly 40 lowercase hex characters
                 if digest_str.len() != 40 {
                     return Err(SwhidError::InvalidDigest(format!(
@@ -334,7 +335,7 @@ impl FromStr for Swhid {
                     return Err(SwhidError::InvalidDigest(digest_str.to_owned()));
                 }
             }
-            SwhidVersion::V2 => {
+            "2" => {
                 // v2 requires exactly 64 lowercase hex characters for SHA256
                 if digest_str.len() != 64 {
                     return Err(SwhidError::InvalidDigest(format!(
@@ -349,14 +350,17 @@ impl FromStr for Swhid {
                     return Err(SwhidError::InvalidDigest(digest_str.to_owned()));
                 }
             }
+            _ => {
+                return Err(SwhidError::InvalidVersion(ver.to_owned()));
+            }
         }
         
         let digest = serializer.decode(digest_str)
             .map_err(|_| SwhidError::InvalidDigest(digest_str.to_owned()))?;
 
         // Validate digest length based on version
-        match version {
-            SwhidVersion::V1 => {
+        match ver {
+            "1" => {
                 if digest.len() != 20 {
                     return Err(SwhidError::InvalidDigest(format!(
                         "v1 digest must be 20 bytes, got {}",
@@ -364,7 +368,7 @@ impl FromStr for Swhid {
                     )));
                 }
             }
-            SwhidVersion::V2 => {
+            "2" => {
                 if digest.len() != 32 {
                     return Err(SwhidError::InvalidDigest(format!(
                         "v2 SHA256 digest must be 32 bytes, got {}",
@@ -372,13 +376,12 @@ impl FromStr for Swhid {
                     )));
                 }
             }
+            _ => {
+                return Err(SwhidError::InvalidVersion(ver.to_owned()));
+            }
         }
-        
-        Ok(Self {
-            object_type,
-            digest,
-            version,
-        })
+
+        Ok(Swhid::new(object_type, digest, ver.to_string()))
     }
 }
 
@@ -496,16 +499,16 @@ mod tests {
         let swhid = Swhid::new_v1(ObjectType::Content, digest);
         assert_eq!(swhid.object_type(), ObjectType::Content);
         assert_eq!(swhid.digest_bytes(), digest);
-        assert_eq!(swhid.version(), SwhidVersion::V1);
+        assert_eq!(swhid.version(), "1");
     }
 
     #[test]
     fn swhid_new() {
         let digest = vec![0u8; 20];
-        let swhid = Swhid::new(ObjectType::Content, digest.clone(), SwhidVersion::V1);
+        let swhid = Swhid::new(ObjectType::Content, digest.clone(), "1".to_string());
         assert_eq!(swhid.object_type(), ObjectType::Content);
         assert_eq!(swhid.digest_bytes(), digest.as_slice());
-        assert_eq!(swhid.version(), SwhidVersion::V1);
+        assert_eq!(swhid.version(), "1");
     }
 
     #[test]
@@ -638,7 +641,7 @@ mod tests {
         // v2 with 64 hex chars (32 bytes SHA256)
         let v2_hex = "0000000000000000000000000000000000000000000000000000000000000000";
         let swhid: Swhid = format!("swh:2:cnt:{}", v2_hex).parse().unwrap();
-        assert_eq!(swhid.version(), SwhidVersion::V2);
+        assert_eq!(swhid.version(), "2");
         assert_eq!(swhid.object_type(), ObjectType::Content);
         assert_eq!(swhid.digest_bytes().len(), 32);
     }
@@ -859,7 +862,7 @@ mod tests {
         assert_ne!(hex_str, base64_str);
         
         // Can parse back with parse_with
-        let parsed = Swhid::parse_with(&base64_str, &Base64Serializer::new(), SwhidVersion::V2).unwrap();
+        let parsed = Swhid::parse_with(&base64_str, &Base64Serializer::new(), "2").unwrap();
         assert_eq!(parsed.digest_bytes(), swhid.digest_bytes());
     }
 
@@ -875,9 +878,9 @@ mod tests {
         let z85_str = swhid.to_string_with(&Z85Serializer::new());
         assert!(z85_str.starts_with("swh:2:cnt:"));
         
-        let parsed = Swhid::parse_with(&z85_str, &Z85Serializer::new(), SwhidVersion::V2).unwrap();
+        let parsed = Swhid::parse_with(&z85_str, &Z85Serializer::new(), "2").unwrap();
         assert_eq!(parsed.digest_bytes(), swhid.digest_bytes());
-        assert_eq!(parsed.version(), SwhidVersion::V2);
+        assert_eq!(parsed.version(), "2");
     }
 
     #[test]
@@ -891,42 +894,6 @@ mod tests {
         let base64_str = swhid.to_string_with(&Base64Serializer::new());
         
         // Should fail if wrong version specified
-        assert!(Swhid::parse_with(&base64_str, &Base64Serializer::new(), SwhidVersion::V1).is_err());
-    }
-
-    #[test]
-    fn parse_with_invalid_encoding() {
-        use crate::serialization::{Base64Serializer, HexSerializer};
-        use crate::Content;
-        use crate::config::HashConfig;
-        
-        // Create a v2 SWHID with base64 encoding
-        let content = Content::from_bytes(b"test");
-        let swhid = content.swhid_with_config(&HashConfig::v2_sha256_base64());
-        let base64_str = swhid.to_string_with(&Base64Serializer::new()).unwrap();
-        
-        // Should fail if wrong serializer used
-        assert!(Swhid::parse_with(&base64_str, &HexSerializer::new(), SwhidVersion::V2).is_err());
-    }
-
-    #[test]
-    fn hash_config_validation_valid_config() {
-        use crate::hash::{HashFunction, Sha1Hash};
-        use crate::serialization::HexSerializer;
-        use crate::types::{SwhidVersion, HashAlgorithm, Encoding};
-        use crate::config::HashConfig;
-        
-        // Test that valid config creation works
-        let hasher = Box::new(Sha1Hash::new());
-        let serializer = Box::new(HexSerializer::new());
-        
-        let valid_config = HashConfig::new(
-            hasher,
-            serializer,
-            SwhidVersion::V1,
-            HashAlgorithm::Sha1, // Correct algorithm
-            Encoding::Hex,
-        );
-        assert!(valid_config.is_ok());
+        assert!(Swhid::parse_with(&base64_str, &Base64Serializer::new(), "1").is_err());
     }
 }

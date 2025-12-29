@@ -493,7 +493,7 @@ enum Command {
 
 #### Content Command
 ```bash
-swhid content --file README.md
+swhid content README.md
 echo "Hello" | swhid content
 ```
 Computes content SWHID from file or stdin.

@@ -17,12 +17,12 @@ struct Cli {
     /// SWHID version (1 or 2)
     #[arg(long, value_name = "VERSION", default_value = "1")]
     version: SwhidVersion,
-    /// Hash function (sha1 or sha256)
-    #[arg(long, value_name = "HASH", default_value = "sha1")]
-    hash: HashAlgorithm,
-    /// Serialization format (hex, base64, base64url, base32, base32hex, or z85)
-    #[arg(long, value_name = "FORMAT", default_value = "hex")]
-    serialization: Encoding,
+    /// Hash function (sha1 or sha256). Defaults to sha1 for v1, sha256 for v2.
+    #[arg(long, value_name = "HASH")]
+    hash: Option<HashAlgorithm>,
+    /// Serialization format (hex, base64, base64url, base32, base32hex, or z85). Defaults to hex.
+    #[arg(long, value_name = "FORMAT")]
+    serialization: Option<Encoding>,
     #[command(subcommand)]
     cmd: Command,
 }
@@ -31,8 +31,8 @@ struct Cli {
 enum Command {
     /// Compute a content SWHID from stdin or a file
     Content {
-        /// Path to file (if omitted, read stdin)
-        #[arg(short, long)]
+        /// Path to file (if omitted, reads from stdin automatically; do not use '-' for stdin)
+        #[arg(value_name = "FILE")]
         file: Option<PathBuf>,
     },
     /// Compute a directory SWHID recursively
@@ -122,7 +122,17 @@ fn get_hash_config(version: SwhidVersion, hash: HashAlgorithm, serialization: En
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-    let config = get_hash_config(cli.version, cli.hash, cli.serialization)?;
+    
+    // Resolve defaults based on version
+    let hash = cli.hash.unwrap_or_else(|| {
+        match cli.version {
+            SwhidVersion::V1 => HashAlgorithm::Sha1,
+            SwhidVersion::V2 => HashAlgorithm::Sha256,
+        }
+    });
+    let serialization = cli.serialization.unwrap_or(Encoding::Hex);
+    
+    let config = get_hash_config(cli.version, hash, serialization)?;
     let use_v2 = cli.version == SwhidVersion::V2;
     
     match cli.cmd {

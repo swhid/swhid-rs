@@ -113,6 +113,76 @@ impl HashConfig {
         })
     }
 
+    /// Encode a digest byte array using the configured serializer.
+    ///
+    /// This method applies the serialization format (hex, base64, etc.)
+    /// to the raw digest bytes. The serializer does NOT affect the digest
+    /// computation itself, only how it is encoded for display/storage.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swhid::config::HashConfig;
+    ///
+    /// let config = HashConfig::v2_sha256_z85();
+    /// let digest = vec![0u8; 32]; // SHA256 digest
+    /// let encoded = config.encode_digest(&digest);
+    /// assert_eq!(encoded.len(), 40); // Z85 encoding
+    /// ```
+    pub fn encode_digest(&self, digest: &[u8]) -> String {
+        self.serializer.encode(digest)
+    }
+
+    /// Decode an encoded digest string back to bytes using the configured serializer.
+    ///
+    /// This method decodes a serialized digest string (hex, base64, etc.)
+    /// back to raw digest bytes. Returns an error if the encoded string
+    /// is invalid for this serialization format.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swhid::config::HashConfig;
+    ///
+    /// let config = HashConfig::v2_sha256_hex();
+    /// let encoded = "a0a477f1ecf419c7eaa7fe256c5c12fb03bee86df9a22aad25f85930de203e14";
+    /// let digest = config.decode_digest(encoded).unwrap();
+    /// assert_eq!(digest.len(), 32); // SHA256 digest size
+    /// ```
+    pub fn decode_digest(&self, encoded: &str) -> Result<Vec<u8>, crate::error::SwhidError> {
+        let decoded = self.serializer.decode(encoded)?;
+        // Validate decoded length matches expected digest size
+        if decoded.len() != self.hash_function.digest_size() {
+            return Err(crate::error::SwhidError::InvalidDigest(format!(
+                "Decoded digest length {} does not match expected size {} for {}",
+                decoded.len(),
+                self.hash_function.digest_size(),
+                self.hash_function.name()
+            )));
+        }
+        Ok(decoded)
+    }
+
+    /// Return the expected digest size in bytes for this hash function.
+    ///
+    /// This is the size of the raw digest bytes before serialization.
+    /// For SHA1, this is 20 bytes. For SHA256, this is 32 bytes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swhid::config::HashConfig;
+    ///
+    /// let v1_config = HashConfig::v1();
+    /// assert_eq!(v1_config.expected_digest_size(), 20);
+    ///
+    /// let v2_config = HashConfig::v2_sha256_hex();
+    /// assert_eq!(v2_config.expected_digest_size(), 32);
+    /// ```
+    pub fn expected_digest_size(&self) -> usize {
+        self.hash_function.digest_size()
+    }
+
     /// Create v1 configuration (SHA1 + hex).
     ///
     /// This is the default configuration for SWHID v1 and maintains

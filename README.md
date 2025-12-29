@@ -80,6 +80,7 @@ println!("Directory SWHID: {}", swhid);
 
 ```rust,no_run
 use swhid::{Content, config::HashConfig};
+use swhid::serialization::{Base64Serializer, Z85Serializer};
 
 let content = Content::from_bytes(b"Hello, World!");
 
@@ -100,11 +101,18 @@ let z85_swhid = content.swhid_with_config(&z85_config);
 assert_eq!(hex_swhid.digest_bytes(), base64_swhid.digest_bytes());
 assert_eq!(hex_swhid.digest_bytes(), z85_swhid.digest_bytes());
 
-// But different string representations (Display uses hex for all)
-println!("V2 hex: {}", hex_swhid);
-println!("V2 base64: {}", base64_swhid);
-println!("V2 z85: {}", z85_swhid);
+// Hex is the canonical format (Display always uses hex)
+println!("V2 hex (canonical): {}", hex_swhid);
+println!("V2 base64: {}", hex_swhid.to_string_with(&Base64Serializer::new()));
+println!("V2 z85: {}", hex_swhid.to_string_with(&Z85Serializer::new()));
+
+// Parse non-hex formats using parse_with()
+let base64_str = hex_swhid.to_string_with(&Base64Serializer::new());
+let parsed = Swhid::parse_with(&base64_str, &Base64Serializer::new(), "2").unwrap();
+assert_eq!(parsed.digest_bytes(), hex_swhid.digest_bytes());
 ```
+
+**Note**: Hex is the canonical encoding format for SWHID identifiers. The `Display` trait and `FromStr` implementation use hex encoding. Alternative serialization formats (base64, base32, z85, etc.) are available via `to_string_with()` and `parse_with()` for presentation purposes, but hex remains the standard format.
 
 ### Creating a qualified SWHID
 
@@ -154,7 +162,7 @@ use std::path::PathBuf;
 
 ```bash
 # Content SWHIDs (v1, default)
-swhid content --file README.md
+swhid content README.md
 echo "Hello, World!" | swhid content
 
 # Content SWHIDs (v2 with different serialization formats)
