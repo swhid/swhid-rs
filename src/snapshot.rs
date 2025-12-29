@@ -1,5 +1,4 @@
 use crate::core::{ObjectType, Swhid};
-use crate::types::SwhidVersion;
 use crate::error::SnapshotError;
 use crate::hash::{hash_swhid_object, hash_swhid_object_with};
 use crate::config::HashConfig;
@@ -92,6 +91,7 @@ impl Snapshot {
 mod tests {
     use super::*;
     use crate::config::HashConfig;
+    use crate::types::SwhidVersion;
 
     #[test]
     fn snapshot_swhid_v1() {

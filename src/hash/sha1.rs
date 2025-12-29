@@ -22,10 +22,10 @@ impl Default for Sha1Hash {
 }
 
 impl HashFunction for Sha1Hash {
-    fn hash(&self, data: &[u8]) -> Vec<u8> {
+    fn hash(&self, data: &[u8]) -> Box<[u8]> {
         let mut hasher = Sha1CD::new();
         hasher.update(data);
-        hasher.finalize().to_vec()
+        hasher.finalize().to_vec().into_boxed_slice()
     }
 
     fn digest_size(&self) -> usize {

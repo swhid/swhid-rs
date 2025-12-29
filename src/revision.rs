@@ -1,5 +1,4 @@
 use crate::utils::HeaderWriter;
-use crate::types::SwhidVersion;
 use crate::{Bytestring, Swhid};
 use crate::hash::{hash_swhid_object, hash_swhid_object_with};
 use crate::config::HashConfig;
@@ -91,6 +90,7 @@ pub fn rev_manifest(rev: &Revision) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::config::HashConfig;
+    use crate::types::SwhidVersion;
 
     #[test]
     fn revision_swhid_v1() {

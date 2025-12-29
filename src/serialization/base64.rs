@@ -22,14 +22,17 @@ impl Default for Base64Serializer {
 }
 
 impl DigestSerializer for Base64Serializer {
-    fn encode(&self, digest: &[u8]) -> String {
-        base64::engine::general_purpose::STANDARD.encode(digest)
+    fn encode(&self, digest: &[u8]) -> Result<String, SwhidError> {
+        Ok(base64::engine::general_purpose::STANDARD.encode(digest))
     }
 
     fn decode(&self, encoded: &str) -> Result<Vec<u8>, SwhidError> {
         base64::engine::general_purpose::STANDARD
             .decode(encoded)
-            .map_err(|e| SwhidError::InvalidDigest(format!("Invalid base64 encoding: {e}")))
+            .map_err(|e| SwhidError::EncodingError {
+                format: "base64".to_string(),
+                message: format!("Invalid base64 encoding: {e}"),
+            })
     }
 
     fn name(&self) -> &str {
@@ -57,14 +60,17 @@ impl Default for Base64UrlSerializer {
 }
 
 impl DigestSerializer for Base64UrlSerializer {
-    fn encode(&self, digest: &[u8]) -> String {
-        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest)
+    fn encode(&self, digest: &[u8]) -> Result<String, SwhidError> {
+        Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(digest))
     }
 
     fn decode(&self, encoded: &str) -> Result<Vec<u8>, SwhidError> {
         base64::engine::general_purpose::URL_SAFE_NO_PAD
             .decode(encoded)
-            .map_err(|e| SwhidError::InvalidDigest(format!("Invalid base64url encoding: {e}")))
+            .map_err(|e| SwhidError::EncodingError {
+                format: "base64url".to_string(),
+                message: format!("Invalid base64url encoding: {e}"),
+            })
     }
 
     fn name(&self) -> &str {
@@ -80,7 +86,7 @@ mod tests {
     fn base64_encode() {
         let serializer = Base64Serializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         assert_eq!(encoded, "EjRWeA==");
     }
 
@@ -96,7 +102,7 @@ mod tests {
     fn base64_roundtrip() {
         let serializer = Base64Serializer::new();
         let data = vec![0x00, 0xff, 0x12, 0xab, 0xcd, 0xef];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         let decoded = serializer.decode(&encoded).unwrap();
         assert_eq!(data, decoded);
     }
@@ -117,7 +123,7 @@ mod tests {
     fn base64_sha256_digest() {
         let serializer = Base64Serializer::new();
         let sha256_digest = vec![0u8; 32];
-        let encoded = serializer.encode(&sha256_digest);
+        let encoded = serializer.encode(&sha256_digest).unwrap();
         // 32 bytes = 44 base64 chars (with padding)
         assert_eq!(encoded.len(), 44);
     }
@@ -126,7 +132,7 @@ mod tests {
     fn base64url_encode() {
         let serializer = Base64UrlSerializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         assert_eq!(encoded, "EjRWeA");
         assert!(!encoded.contains('+'));
         assert!(!encoded.contains('/'));
@@ -145,7 +151,7 @@ mod tests {
     fn base64url_roundtrip() {
         let serializer = Base64UrlSerializer::new();
         let data = vec![0x00, 0xff, 0x12, 0xab, 0xcd, 0xef];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         let decoded = serializer.decode(&encoded).unwrap();
         assert_eq!(data, decoded);
     }
@@ -160,7 +166,7 @@ mod tests {
     fn base64url_sha256_digest() {
         let serializer = Base64UrlSerializer::new();
         let sha256_digest = vec![0u8; 32];
-        let encoded = serializer.encode(&sha256_digest);
+        let encoded = serializer.encode(&sha256_digest).unwrap();
         // 32 bytes = 43 base64url chars (no padding)
         assert_eq!(encoded.len(), 43);
     }
@@ -171,8 +177,8 @@ mod tests {
         let base64url_ser = Base64UrlSerializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78];
         
-        let base64_encoded = base64_ser.encode(&data);
-        let base64url_encoded = base64url_ser.encode(&data);
+        let base64_encoded = base64_ser.encode(&data).unwrap();
+        let base64url_encoded = base64url_ser.encode(&data).unwrap();
         
         // They should decode to the same data
         assert_eq!(base64_ser.decode(&base64_encoded).unwrap(), data);

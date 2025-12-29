@@ -1,3 +1,4 @@
+use crate::error::SwhidError;
 use crate::hash::{HashFunction, Sha1Hash, Sha256Hash};
 use crate::serialization::{DigestSerializer, HexSerializer, Base64Serializer, Base64UrlSerializer, Base32Serializer, Base32HexSerializer, Z85Serializer};
 use crate::types::{SwhidVersion, HashAlgorithm, Encoding};
@@ -129,7 +130,7 @@ impl HashConfig {
     /// let encoded = config.encode_digest(&digest);
     /// assert_eq!(encoded.len(), 40); // Z85 encoding
     /// ```
-    pub fn encode_digest(&self, digest: &[u8]) -> String {
+    pub fn encode_digest(&self, digest: &[u8]) -> Result<String, SwhidError> {
         self.serializer.encode(digest)
     }
 
@@ -138,6 +139,24 @@ impl HashConfig {
     /// This method decodes a serialized digest string (hex, base64, etc.)
     /// back to raw digest bytes. Returns an error if the encoded string
     /// is invalid for this serialization format.
+    ///
+    /// # Errors
+    ///
+    /// Returns `SwhidError::EncodingError` if the encoded string is invalid
+    /// for the configured serialization format (e.g., invalid hex characters,
+    /// malformed base64, or Z85 input not a multiple of 4 bytes).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use swhid::config::HashConfig;
+    ///
+    /// let config = HashConfig::v2_sha256_hex();
+    /// let encoded = "a0a477f1ecf419c7eaa7fe256c5c12fb03bee86df9a22aad25f85930de203e14";
+    /// let decoded = config.decode_digest(encoded)?;
+    /// assert_eq!(decoded.len(), 32); // SHA256 digest
+    /// # Ok::<(), swhid::SwhidError>(())
+    /// ```
     ///
     /// # Examples
     ///
@@ -349,9 +368,9 @@ mod tests {
         let config = HashConfig::v2_sha256_hex();
         let data = vec![0x12, 0x34, 0x56, 0x78];
         let hash = config.hash_function.hash(&data);
-        let encoded = config.serializer.encode(&hash);
+        let encoded = config.serializer.encode(&hash).unwrap();
         let decoded = config.serializer.decode(&encoded).unwrap();
-        assert_eq!(hash, decoded);
+        assert_eq!(hash.as_ref(), decoded.as_slice());
     }
 
     #[test]
@@ -366,20 +385,20 @@ mod tests {
         let data = vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
         let hash = hex_config.hash_function.hash(&data);
 
-        let hex_encoded = hex_config.serializer.encode(&hash);
-        let base64_encoded = base64_config.serializer.encode(&hash);
-        let base64url_encoded = base64url_config.serializer.encode(&hash);
-        let base32_encoded = base32_config.serializer.encode(&hash);
-        let base32hex_encoded = base32hex_config.serializer.encode(&hash);
-        let z85_encoded = z85_config.serializer.encode(&hash);
+        let hex_encoded = hex_config.serializer.encode(&hash).unwrap();
+        let base64_encoded = base64_config.serializer.encode(&hash).unwrap();
+        let base64url_encoded = base64url_config.serializer.encode(&hash).unwrap();
+        let base32_encoded = base32_config.serializer.encode(&hash).unwrap();
+        let base32hex_encoded = base32hex_config.serializer.encode(&hash).unwrap();
+        let z85_encoded = z85_config.serializer.encode(&hash).unwrap();
 
         // All should decode to the same hash
-        assert_eq!(hex_config.serializer.decode(&hex_encoded).unwrap(), hash);
-        assert_eq!(base64_config.serializer.decode(&base64_encoded).unwrap(), hash);
-        assert_eq!(base64url_config.serializer.decode(&base64url_encoded).unwrap(), hash);
-        assert_eq!(base32_config.serializer.decode(&base32_encoded).unwrap(), hash);
-        assert_eq!(base32hex_config.serializer.decode(&base32hex_encoded).unwrap(), hash);
-        assert_eq!(z85_config.serializer.decode(&z85_encoded).unwrap(), hash);
+        assert_eq!(hex_config.serializer.decode(&hex_encoded).unwrap(), hash.as_ref());
+        assert_eq!(base64_config.serializer.decode(&base64_encoded).unwrap(), hash.as_ref());
+        assert_eq!(base64url_config.serializer.decode(&base64url_encoded).unwrap(), hash.as_ref());
+        assert_eq!(base32_config.serializer.decode(&base32_encoded).unwrap(), hash.as_ref());
+        assert_eq!(base32hex_config.serializer.decode(&base32hex_encoded).unwrap(), hash.as_ref());
+        assert_eq!(z85_config.serializer.decode(&z85_encoded).unwrap(), hash.as_ref());
 
         // But encodings are different
         assert_ne!(hex_encoded, base64_encoded);

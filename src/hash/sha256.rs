@@ -22,10 +22,10 @@ impl Default for Sha256Hash {
 }
 
 impl HashFunction for Sha256Hash {
-    fn hash(&self, data: &[u8]) -> Vec<u8> {
+    fn hash(&self, data: &[u8]) -> Box<[u8]> {
         let mut hasher = Sha256::new();
         hasher.update(data);
-        hasher.finalize().to_vec()
+        hasher.finalize().to_vec().into_boxed_slice()
     }
 
     fn digest_size(&self) -> usize {

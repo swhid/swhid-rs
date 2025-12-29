@@ -31,21 +31,26 @@ pub trait DigestSerializer: Send + Sync {
     /// The input is a raw digest (e.g., 20 bytes for SHA1, 32 bytes for SHA256).
     /// Returns a string representation suitable for use in SWHID identifiers.
     ///
+    /// # Errors
+    ///
+    /// Returns an error if the digest cannot be encoded (e.g., Z85 requires
+    /// length to be a multiple of 4 bytes).
+    ///
     /// # Examples
     ///
     /// ```
     /// use swhid::serialization::{HexSerializer, Base64Serializer, Z85Serializer};
     ///
     /// let digest = vec![0u8; 32]; // SHA256 digest
-    /// let hex_encoded = HexSerializer::new().encode(&digest);
-    /// let base64_encoded = Base64Serializer::new().encode(&digest);
-    /// let z85_encoded = Z85Serializer::new().encode(&digest);
+    /// let hex_encoded = HexSerializer::new().encode(&digest).unwrap();
+    /// let base64_encoded = Base64Serializer::new().encode(&digest).unwrap();
+    /// let z85_encoded = Z85Serializer::new().encode(&digest).unwrap();
     ///
     /// assert_eq!(hex_encoded.len(), 64);
     /// assert_eq!(base64_encoded.len(), 44);
     /// assert_eq!(z85_encoded.len(), 40);
     /// ```
-    fn encode(&self, digest: &[u8]) -> String;
+    fn encode(&self, digest: &[u8]) -> Result<String, SwhidError>;
 
     /// Decode a string representation back to a digest byte array.
     ///
@@ -77,7 +82,7 @@ mod tests {
     fn hex_serializer_roundtrip() {
         let serializer = HexSerializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         let decoded = serializer.decode(&encoded).unwrap();
         assert_eq!(data, decoded);
     }
@@ -86,7 +91,7 @@ mod tests {
     fn base64_serializer_roundtrip() {
         let serializer = Base64Serializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         let decoded = serializer.decode(&encoded).unwrap();
         assert_eq!(data, decoded);
     }
@@ -95,7 +100,7 @@ mod tests {
     fn base64url_serializer_roundtrip() {
         let serializer = Base64UrlSerializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         let decoded = serializer.decode(&encoded).unwrap();
         assert_eq!(data, decoded);
     }
@@ -104,7 +109,7 @@ mod tests {
     fn base32_serializer_roundtrip() {
         let serializer = Base32Serializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         let decoded = serializer.decode(&encoded).unwrap();
         assert_eq!(data, decoded);
     }
@@ -113,7 +118,7 @@ mod tests {
     fn base32hex_serializer_roundtrip() {
         let serializer = Base32HexSerializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         let decoded = serializer.decode(&encoded).unwrap();
         assert_eq!(data, decoded);
     }
@@ -122,7 +127,7 @@ mod tests {
     fn z85_serializer_roundtrip() {
         let serializer = Z85Serializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         let decoded = serializer.decode(&encoded).unwrap();
         assert_eq!(data, decoded);
     }

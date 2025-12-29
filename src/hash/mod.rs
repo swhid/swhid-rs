@@ -59,7 +59,7 @@ pub fn hash_swhid_object_with(typ: &str, payload: &[u8], hasher: &dyn HashFuncti
     let mut combined = Vec::with_capacity(header.len() + payload.len());
     combined.extend_from_slice(&header);
     combined.extend_from_slice(payload);
-    hasher.hash(&combined)
+    hasher.hash(&combined).to_vec()
 }
 
 #[cfg(test)]

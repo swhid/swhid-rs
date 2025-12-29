@@ -23,14 +23,17 @@ impl Default for Base32Serializer {
 }
 
 impl DigestSerializer for Base32Serializer {
-    fn encode(&self, digest: &[u8]) -> String {
-        BASE32.encode(digest)
+    fn encode(&self, digest: &[u8]) -> Result<String, SwhidError> {
+        Ok(BASE32.encode(digest))
     }
 
     fn decode(&self, encoded: &str) -> Result<Vec<u8>, SwhidError> {
         BASE32
             .decode(encoded.as_bytes())
-            .map_err(|e| SwhidError::InvalidDigest(format!("Invalid base32 encoding: {e}")))
+            .map_err(|e| SwhidError::EncodingError {
+                format: "base32".to_string(),
+                message: format!("Invalid base32 encoding: {e}"),
+            })
     }
 
     fn name(&self) -> &str {
@@ -59,14 +62,17 @@ impl Default for Base32HexSerializer {
 }
 
 impl DigestSerializer for Base32HexSerializer {
-    fn encode(&self, digest: &[u8]) -> String {
-        BASE32HEX.encode(digest)
+    fn encode(&self, digest: &[u8]) -> Result<String, SwhidError> {
+        Ok(BASE32HEX.encode(digest))
     }
 
     fn decode(&self, encoded: &str) -> Result<Vec<u8>, SwhidError> {
         BASE32HEX
             .decode(encoded.as_bytes())
-            .map_err(|e| SwhidError::InvalidDigest(format!("Invalid base32hex encoding: {e}")))
+            .map_err(|e| SwhidError::EncodingError {
+                format: "base32hex".to_string(),
+                message: format!("Invalid base32hex encoding: {e}"),
+            })
     }
 
     fn name(&self) -> &str {
@@ -82,7 +88,7 @@ mod tests {
     fn base32_encode() {
         let serializer = Base32Serializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         assert_eq!(encoded, "CI2FM6A=");
     }
 
@@ -98,7 +104,7 @@ mod tests {
     fn base32_roundtrip() {
         let serializer = Base32Serializer::new();
         let data = vec![0x00, 0xff, 0x12, 0xab, 0xcd, 0xef];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         let decoded = serializer.decode(&encoded).unwrap();
         assert_eq!(data, decoded);
     }
@@ -120,7 +126,7 @@ mod tests {
     fn base32_sha1_digest() {
         let serializer = Base32Serializer::new();
         let sha1_digest = vec![0u8; 20];
-        let encoded = serializer.encode(&sha1_digest);
+        let encoded = serializer.encode(&sha1_digest).unwrap();
         // 20 bytes = 32 base32 chars (with padding)
         assert_eq!(encoded.len(), 32);
     }
@@ -129,7 +135,7 @@ mod tests {
     fn base32_sha256_digest() {
         let serializer = Base32Serializer::new();
         let sha256_digest = vec![0u8; 32];
-        let encoded = serializer.encode(&sha256_digest);
+        let encoded = serializer.encode(&sha256_digest).unwrap();
         // 32 bytes = 52 base32 chars (with padding)
         // Actually, 32 bytes = 256 bits, which needs ceil(256/5) = 52 chars, but padding may vary
         assert!(encoded.len() >= 52);
@@ -140,7 +146,7 @@ mod tests {
     fn base32hex_encode() {
         let serializer = Base32HexSerializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         // Base32hex produces "28Q5CU0=" for this data (different from standard base32)
         assert_eq!(encoded, "28Q5CU0=");
         // Verify roundtrip
@@ -153,7 +159,7 @@ mod tests {
         let serializer = Base32HexSerializer::new();
         // Encode first to get valid base32hex
         let data = vec![0x12, 0x34, 0x56, 0x78];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         let decoded = serializer.decode(&encoded).unwrap();
         assert_eq!(decoded, data);
     }
@@ -162,7 +168,7 @@ mod tests {
     fn base32hex_roundtrip() {
         let serializer = Base32HexSerializer::new();
         let data = vec![0x00, 0xff, 0x12, 0xab, 0xcd, 0xef];
-        let encoded = serializer.encode(&data);
+        let encoded = serializer.encode(&data).unwrap();
         let decoded = serializer.decode(&encoded).unwrap();
         assert_eq!(data, decoded);
     }
@@ -177,7 +183,7 @@ mod tests {
     fn base32hex_sha256_digest() {
         let serializer = Base32HexSerializer::new();
         let sha256_digest = vec![0u8; 32];
-        let encoded = serializer.encode(&sha256_digest);
+        let encoded = serializer.encode(&sha256_digest).unwrap();
         // 32 bytes = 52 base32hex chars (with padding)
         // Actually, 32 bytes = 256 bits, which needs ceil(256/5) = 52 chars, but padding may vary
         assert!(encoded.len() >= 52);
@@ -190,8 +196,8 @@ mod tests {
         let base32hex_ser = Base32HexSerializer::new();
         let data = vec![0x12, 0x34, 0x56, 0x78];
         
-        let base32_encoded = base32_ser.encode(&data);
-        let base32hex_encoded = base32hex_ser.encode(&data);
+        let base32_encoded = base32_ser.encode(&data).unwrap();
+        let base32hex_encoded = base32hex_ser.encode(&data).unwrap();
         
         // They should decode to the same data
         assert_eq!(base32_ser.decode(&base32_encoded).unwrap(), data);

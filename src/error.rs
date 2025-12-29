@@ -20,6 +20,19 @@ pub enum SwhidError {
     #[error("invalid digest (expected 40 hex chars): {0}")]
     InvalidDigest(String),
 
+    /// Encoding-specific error for serialization format operations.
+    ///
+    /// This error occurs when encoding or decoding operations fail due to
+    /// format-specific constraints (e.g., Z85 requires input length to be
+    /// a multiple of 4 bytes).
+    #[error("encoding error ({format}): {message}")]
+    EncodingError {
+        /// The encoding format that failed (hex, base64, base32, z85, etc.)
+        format: String,
+        /// Detailed error message
+        message: String,
+    },
+
     #[error("invalid qualifier key: {0}")]
     InvalidQualifierKey(String),
 

@@ -1,5 +1,4 @@
 use crate::core::{ObjectType, Swhid};
-use crate::types::SwhidVersion;
 use crate::hash::{hash_content, hash_content_with};
 use crate::config::HashConfig;
 
@@ -57,6 +56,7 @@ impl<B: AsRef<[u8]>> Content<B> {
 mod tests {
     use super::*;
     use crate::config::HashConfig;
+    use crate::types::SwhidVersion;
 
     #[test]
     fn content_swhid_v1() {
