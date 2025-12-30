@@ -951,4 +951,40 @@ mod tests {
         // Should fail if wrong version specified
         assert!(Swhid::parse_with(&base64_str, &Base64Serializer::new(), SwhidVersion::V1).is_err());
     }
+
+    #[test]
+    fn parse_with_invalid_encoding() {
+        use crate::serialization::{Base64Serializer, HexSerializer};
+        use crate::Content;
+        use crate::config::HashConfig;
+        
+        // Create a v2 SWHID with base64 encoding
+        let content = Content::from_bytes(b"test");
+        let swhid = content.swhid_with_config(&HashConfig::v2_sha256_base64());
+        let base64_str = swhid.to_string_with(&Base64Serializer::new()).unwrap();
+        
+        // Should fail if wrong serializer used
+        assert!(Swhid::parse_with(&base64_str, &HexSerializer::new(), SwhidVersion::V2).is_err());
+    }
+
+    #[test]
+    fn hash_config_validation_valid_config() {
+        use crate::hash::{HashFunction, Sha1Hash};
+        use crate::serialization::HexSerializer;
+        use crate::types::{SwhidVersion, HashAlgorithm, Encoding};
+        use crate::config::HashConfig;
+        
+        // Test that valid config creation works
+        let hasher = Box::new(Sha1Hash::new());
+        let serializer = Box::new(HexSerializer::new());
+        
+        let valid_config = HashConfig::new(
+            hasher,
+            serializer,
+            SwhidVersion::V1,
+            HashAlgorithm::Sha1, // Correct algorithm
+            Encoding::Hex,
+        );
+        assert!(valid_config.is_ok());
+    }
 }

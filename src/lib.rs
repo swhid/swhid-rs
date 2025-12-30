@@ -7,11 +7,8 @@ pub mod error;
 #[cfg(feature = "git")]
 pub mod git;
 pub mod hash;
-<<<<<<< HEAD
-pub mod permissions;
-=======
 pub mod config;
->>>>>>> 9bca75e (feat: Create HashConfig structure)
+pub mod permissions;
 pub mod qualifier;
 pub mod release;
 pub mod revision;
@@ -23,7 +20,6 @@ mod utils;
 pub use content::Content;
 pub use core::{ObjectType, Swhid};
 pub use directory::{Directory, DiskDirectoryBuilder, Entry, WalkOptions};
-pub use directory::{DirectoryBuildOptions, ManifestEntry};
 pub use permissions::{
     EntryExec, EntryPerms, PermissionPolicy, PermissionsSource, PermissionsSourceKind,
     resolve_file_permissions,
