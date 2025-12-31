@@ -1,7 +1,10 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-use swhid::{Content, DiskDirectoryBuilder, WalkOptions};
+use swhid::{
+    Content, DirectoryBuildOptions, DiskDirectoryBuilder, PermissionPolicy, PermissionsSourceKind,
+    WalkOptions,
+};
 use swhid::{QualifiedSwhid, Swhid};
 
 #[cfg(feature = "git")]
@@ -34,6 +37,15 @@ enum Command {
         /// Exclude files matching these suffixes (e.g., .tmp, .log)
         #[arg(long, value_name = "SUFFIX")]
         exclude: Vec<String>,
+        /// Permission source (auto, fs, git-index, git-tree, manifest, heuristic)
+        #[arg(long, value_name = "SOURCE", default_value = "auto")]
+        permissions_source: String,
+        /// Permission policy (strict, best-effort)
+        #[arg(long, value_name = "POLICY", default_value = "best-effort")]
+        permissions_policy: String,
+        /// Path to permission manifest file (required when source=manifest)
+        #[arg(long, value_name = "PATH")]
+        permissions_manifest: Option<PathBuf>,
     },
     /// Parse/pretty-print a (qualified) SWHID
     Parse {
@@ -52,6 +64,15 @@ enum Command {
         /// Exclude files matching these suffixes (e.g., .tmp, .log)
         #[arg(long, value_name = "SUFFIX")]
         exclude: Vec<String>,
+        /// Permission source (auto, fs, git-index, git-tree, manifest, heuristic)
+        #[arg(long, value_name = "SOURCE", default_value = "auto")]
+        permissions_source: String,
+        /// Permission policy (strict, best-effort)
+        #[arg(long, value_name = "POLICY", default_value = "best-effort")]
+        permissions_policy: String,
+        /// Path to permission manifest file (required when source=manifest)
+        #[arg(long, value_name = "PATH")]
+        permissions_manifest: Option<PathBuf>,
     },
     /// Git repository SWHID computation (requires --features git)
     #[cfg(feature = "git")]
@@ -90,6 +111,32 @@ enum GitCommand {
     },
 }
 
+fn parse_permissions_source(s: &str) -> Result<PermissionsSourceKind, Box<dyn std::error::Error>> {
+    match s {
+        "auto" => Ok(PermissionsSourceKind::Auto),
+        "fs" | "filesystem" => Ok(PermissionsSourceKind::Filesystem),
+        "git-index" => Ok(PermissionsSourceKind::GitIndex),
+        "git-tree" => Ok(PermissionsSourceKind::GitTree),
+        "manifest" => Ok(PermissionsSourceKind::Manifest),
+        "heuristic" => Ok(PermissionsSourceKind::Heuristic),
+        _ => Err(format!(
+            "Invalid permissions source: {}. Must be auto, fs, git-index, git-tree, manifest, or heuristic",
+            s
+        ).into()),
+    }
+}
+
+fn parse_permissions_policy(s: &str) -> Result<PermissionPolicy, Box<dyn std::error::Error>> {
+    match s {
+        "strict" => Ok(PermissionPolicy::Strict),
+        "best-effort" | "besteffort" => Ok(PermissionPolicy::BestEffort),
+        _ => Err(format!(
+            "Invalid permissions policy: {}. Must be strict or best-effort",
+            s
+        ).into()),
+    }
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.cmd {
@@ -109,16 +156,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             path,
             follow_symlinks,
             exclude,
+            permissions_source,
+            permissions_policy,
+            permissions_manifest,
         } => {
-            let mut opts = WalkOptions {
-                follow_symlinks,
-                ..Default::default()
+            let perm_source = parse_permissions_source(&permissions_source)?;
+            let perm_policy = parse_permissions_policy(&permissions_policy)?;
+
+            if perm_source == PermissionsSourceKind::Manifest && permissions_manifest.is_none() {
+                return Err("--permissions-manifest is required when --permissions-source=manifest".into());
+            }
+
+            let build_opts = DirectoryBuildOptions {
+                permissions_source: perm_source,
+                permissions_policy: perm_policy,
+                permissions_manifest_path: permissions_manifest,
+                walk_options: WalkOptions {
+                    follow_symlinks,
+                    exclude_suffixes: exclude,
+                },
             };
-            opts.exclude_suffixes = exclude;
-            let s = DiskDirectoryBuilder::new(&path)
-                .with_options(opts)
-                .swhid()?;
-            println!("{s}");
+
+            let dir = DiskDirectoryBuilder::new(&path)
+                .with_build_options(build_opts);
+            let swhid = dir.swhid()?;
+            println!("{swhid}");
         }
         Command::Parse { swhid } => {
             // Try qualified first, fallback to core
@@ -135,20 +197,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             swhid,
             follow_symlinks,
             exclude,
+            permissions_source,
+            permissions_policy,
+            permissions_manifest,
         } => {
+            let perm_source = parse_permissions_source(&permissions_source)?;
+            let perm_policy = parse_permissions_policy(&permissions_policy)?;
+
+            if perm_source == PermissionsSourceKind::Manifest && permissions_manifest.is_none() {
+                return Err("--permissions-manifest is required when --permissions-source=manifest".into());
+            }
+
             let expected: Swhid = swhid.parse()?;
             let actual = if path.is_file() {
                 let bytes = std::fs::read(&path)?;
                 Content::from_bytes(bytes).swhid()
             } else if path.is_dir() {
-                let mut opts = WalkOptions {
-                    follow_symlinks,
-                    ..Default::default()
+                let build_opts = DirectoryBuildOptions {
+                    permissions_source: perm_source,
+                    permissions_policy: perm_policy,
+                    permissions_manifest_path: permissions_manifest,
+                    walk_options: WalkOptions {
+                        follow_symlinks,
+                        exclude_suffixes: exclude,
+                    },
                 };
-                opts.exclude_suffixes = exclude;
-                DiskDirectoryBuilder::new(&path)
-                    .with_options(opts)
-                    .swhid()?
+                let dir = DiskDirectoryBuilder::new(&path)
+                    .with_build_options(build_opts);
+                dir.swhid()?
             } else {
                 eprintln!(
                     "Error: {} is neither a file nor a directory",

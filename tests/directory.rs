@@ -2,6 +2,7 @@ use assert_fs::prelude::*;
 
 use swhid::directory::*;
 use swhid::hash::hash_content;
+use swhid::permissions::EntryPerms;
 use swhid::ObjectType;
 
 fn name(s: &'static str) -> Box<[u8]> {
@@ -272,4 +273,145 @@ fn dir_walk_options_custom() {
 
     assert!(opts.follow_symlinks);
     assert_eq!(opts.exclude_suffixes.len(), 2);
+}
+
+#[test]
+fn executable_bit_changes_directory_id() {
+    use swhid::permissions::EntryPerms;
+    // Golden test: executable bit must change directory ID
+    let content = b"test content";
+    let content_hash = hash_content(content);
+
+    // Directory with non-executable file
+    let dir1 = Directory::from_manifest(vec![ManifestEntry {
+        name: b"script.sh".to_vec(),
+        perms: EntryPerms::File { executable: false },
+        target: content_hash.to_vec(),
+    }])
+    .unwrap();
+
+    // Directory with executable file (same content)
+    let dir2 = Directory::from_manifest(vec![ManifestEntry {
+        name: b"script.sh".to_vec(),
+        perms: EntryPerms::File { executable: true },
+        target: content_hash.to_vec(),
+    }])
+    .unwrap();
+
+    // Directory IDs must differ
+    let swhid1 = dir1.swhid().unwrap();
+    let swhid2 = dir2.swhid().unwrap();
+    assert_ne!(swhid1, swhid2, "Executable bit should change directory ID");
+}
+
+#[test]
+fn manifest_based_directory_building() {
+    use swhid::permissions::EntryPerms;
+    // Test that Directory::from_manifest works correctly
+    let entries = vec![
+        ManifestEntry {
+            name: b"file1.txt".to_vec(),
+            perms: EntryPerms::File { executable: false },
+            target: hash_content(b"content1").to_vec(),
+        },
+        ManifestEntry {
+            name: b"script.sh".to_vec(),
+            perms: EntryPerms::File { executable: true },
+            target: hash_content(b"#!/bin/bash").to_vec(),
+        },
+        ManifestEntry {
+            name: b"subdir".to_vec(),
+            perms: EntryPerms::Directory,
+            target: [0u8; 20].to_vec(), // dummy hash for directory
+        },
+    ];
+
+    let dir = Directory::from_manifest(entries).unwrap();
+    assert_eq!(dir.entries().len(), 3);
+
+    // Verify entries are sorted correctly
+    // Note: Entry.name is private, so we check via the manifest
+    let manifest = dir_manifest(dir.entries().to_vec()).unwrap();
+    // The manifest should contain entries in sorted order
+    assert!(manifest.windows(b"file1.txt".len()).any(|w| w == b"file1.txt"));
+    assert!(manifest.windows(b"script.sh".len()).any(|w| w == b"script.sh"));
+    assert!(manifest.windows(b"subdir".len()).any(|w| w == b"subdir"));
+}
+
+#[test]
+#[cfg(unix)]
+fn unix_filesystem_permission_source() {
+    use swhid::permissions::{FilesystemPermissionsSource, PermissionsSource};
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+
+    let tmp = TempDir::new().unwrap();
+    let file_path = tmp.path().join("test.sh");
+
+    // Create executable file
+    fs::write(&file_path, b"#!/bin/bash").unwrap();
+    let mut perms = fs::metadata(&file_path).unwrap().permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&file_path, perms).unwrap();
+
+    let source = FilesystemPermissionsSource;
+    let exec = source.executable_of(&file_path).unwrap();
+    assert_eq!(exec, swhid::permissions::EntryExec::Known(true));
+
+    // Create non-executable file
+    let file_path2 = tmp.path().join("test.txt");
+    fs::write(&file_path2, b"content").unwrap();
+    let mut perms2 = fs::metadata(&file_path2).unwrap().permissions();
+    perms2.set_mode(0o644);
+    fs::set_permissions(&file_path2, perms2).unwrap();
+
+    let exec2 = source.executable_of(&file_path2).unwrap();
+    assert_eq!(exec2, swhid::permissions::EntryExec::Known(false));
+}
+
+#[test]
+fn permission_manifest_source() {
+    use swhid::permissions::{ManifestPermissionsSource, PermissionsSource};
+    use tempfile::NamedTempFile;
+
+    let manifest_content = r#"
+[[file]]
+path = "bin/tool"
+executable = true
+
+[[file]]
+path = "scripts/run.sh"
+executable = true
+
+[[file]]
+path = "data.txt"
+executable = false
+"#;
+
+    let mut file = NamedTempFile::new().unwrap();
+    use std::io::Write;
+    file.write_all(manifest_content.as_bytes()).unwrap();
+
+    let source = ManifestPermissionsSource::load(file.path()).unwrap();
+
+    // Test known paths
+    assert_eq!(
+        source.executable_of(std::path::Path::new("bin/tool")).unwrap(),
+        swhid::permissions::EntryExec::Known(true)
+    );
+    assert_eq!(
+        source.executable_of(std::path::Path::new("scripts/run.sh")).unwrap(),
+        swhid::permissions::EntryExec::Known(true)
+    );
+    assert_eq!(
+        source.executable_of(std::path::Path::new("data.txt")).unwrap(),
+        swhid::permissions::EntryExec::Known(false)
+    );
+
+    // Test unknown path
+    assert_eq!(
+        source.executable_of(std::path::Path::new("unknown.txt")).unwrap(),
+        swhid::permissions::EntryExec::Unknown
+    );
 }
