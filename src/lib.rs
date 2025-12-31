@@ -20,6 +20,7 @@ mod utils;
 pub use content::Content;
 pub use core::{ObjectType, Swhid};
 pub use directory::{Directory, DiskDirectoryBuilder, Entry, WalkOptions};
+pub use directory::{DirectoryBuildOptions, ManifestEntry};
 pub use permissions::{
     EntryExec, EntryPerms, PermissionPolicy, PermissionsSource, PermissionsSourceKind,
     resolve_file_permissions,

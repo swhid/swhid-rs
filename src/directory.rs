@@ -1,20 +1,20 @@
 use std::borrow::Cow;
 use std::fs;
-use std::io;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
+use std::path::PathBuf;
 
 use crate::core::{ObjectType, Swhid};
 use crate::error::DirectoryError;
 use crate::hash::{hash_content, hash_content_with, hash_swhid_object, hash_swhid_object_with};
 use crate::config::HashConfig;
+use crate::permissions::{
+    EntryPerms, PermissionPolicy, PermissionsSource, PermissionsSourceKind, resolve_file_permissions,
+};
 use crate::utils::check_unique;
 
 const DIRECTORY_MODE: u32 = 0o040000;
-const FILE_MODE: u32 = 0o100644;
-#[allow(dead_code)] // Used on Unix systems, appears unused on Windows
-const EXECUTABLE_FILE_MODE: u32 = 0o100755;
 
 /// Options for SWHID v1.2 directory walking and hashing.
 #[derive(Debug, Clone, Default)]
@@ -23,6 +23,58 @@ pub struct WalkOptions {
     pub follow_symlinks: bool,
     /// Exclude glob patterns (very minimal: literal suffix match)
     pub exclude_suffixes: Vec<String>,
+}
+
+/// Options for building directories with permission handling.
+pub struct DirectoryBuildOptions {
+    /// Permission source to use
+    pub permissions_source: PermissionsSourceKind,
+    /// Policy for handling unknown permissions
+    pub permissions_policy: PermissionPolicy,
+    /// Path to permission manifest file (required when source=Manifest)
+    pub permissions_manifest_path: Option<PathBuf>,
+    /// Hash configuration (optional, for v2 support)
+    pub hash_config: Option<HashConfig>,
+    /// Walk options (symlinks, excludes, etc.)
+    pub walk_options: WalkOptions,
+}
+
+impl Clone for DirectoryBuildOptions {
+    fn clone(&self) -> Self {
+        Self {
+            permissions_source: self.permissions_source.clone(),
+            permissions_policy: self.permissions_policy.clone(),
+            permissions_manifest_path: self.permissions_manifest_path.clone(),
+            hash_config: None, // Cannot clone HashConfig due to trait objects
+            walk_options: self.walk_options.clone(),
+        }
+    }
+}
+
+impl std::fmt::Debug for DirectoryBuildOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DirectoryBuildOptions")
+            .field("permissions_source", &self.permissions_source)
+            .field("permissions_policy", &self.permissions_policy)
+            .field("permissions_manifest_path", &self.permissions_manifest_path)
+            .field("hash_config", &self.hash_config.as_ref().map(|_| "Some(HashConfig)"))
+            .field("walk_options", &self.walk_options)
+            .finish()
+    }
+}
+
+/// Manifest entry for building directories from explicit permissions.
+///
+/// This represents a directory entry with explicit permission information,
+/// allowing platform-independent directory construction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManifestEntry {
+    /// Entry name (raw bytes, no encoding assumptions)
+    pub name: Vec<u8>,
+    /// Entry permissions (canonical SWHID/Git format)
+    pub perms: EntryPerms,
+    /// SWHID object id (digest bytes of the child object, variable length for v2)
+    pub target: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -52,6 +104,16 @@ impl Entry {
             Cow::Owned(name)
         } else {
             Cow::Borrowed(&self.name)
+        }
+    }
+}
+
+impl From<ManifestEntry> for Entry {
+    fn from(manifest: ManifestEntry) -> Self {
+        Entry {
+            name: manifest.name.into_boxed_slice(),
+            mode: manifest.perms.to_swh_mode_u32(),
+            id: manifest.target, // Keep as Vec<u8> for v2 support
         }
     }
 }
@@ -110,59 +172,122 @@ fn sort_and_check_children(children: &mut [Entry]) -> Result<(), DirectoryError>
     Ok(())
 }
 
-fn path_file_mode(meta: &fs::Metadata) -> u32 {
-    #[cfg(unix)]
-    {
-        let m = meta.permissions().mode();
-        let exec = (m & 0o111) != 0;
-        if meta.is_dir() {
-            DIRECTORY_MODE
-        } else if meta.is_file() {
-            if exec {
-                EXECUTABLE_FILE_MODE
-            } else {
-                FILE_MODE
-            }
-        } else {
-            FILE_MODE
-        }
-    }
-    #[cfg(not(unix))]
-    {
-        if meta.is_dir() {
-            DIRECTORY_MODE
-        } else {
-            FILE_MODE
-        }
-    }
-}
-
 fn symlink_mode() -> u32 {
     0o120000
 }
 
-fn read_dir(path: &Path, opts: &WalkOptions, hash_config: Option<&HashConfig>) -> io::Result<Vec<Entry>> {
+fn read_dir(
+    path: &Path,
+    root: &Path,
+    opts: &DirectoryBuildOptions,
+    hash_config: Option<&HashConfig>,
+) -> Result<Vec<Entry>, crate::error::SwhidError> {
+    use crate::permissions::{
+        AutoPermissionsSource, FilesystemPermissionsSource, ManifestPermissionsSource,
+    };
+    #[cfg(feature = "git")]
+    use crate::permissions::{GitIndexPermissionsSource, GitTreePermissionsSource};
+
+    // Use hash_config from opts if available, otherwise use parameter
+    let hash_config = opts.hash_config.as_ref().or(hash_config);
+
+    // Create permission source based on options
+    let permission_source: Box<dyn PermissionsSource> = match opts.permissions_source {
+        PermissionsSourceKind::Auto => {
+            Box::new(AutoPermissionsSource::new(root)?)
+        }
+        PermissionsSourceKind::Filesystem => {
+            Box::new(FilesystemPermissionsSource)
+        }
+        #[cfg(feature = "git")]
+        PermissionsSourceKind::GitIndex => {
+            let repo = git2::Repository::open(root).map_err(|e| {
+                crate::error::SwhidError::Io(std::io::Error::other(format!(
+                    "Failed to open Git repository: {}",
+                    e
+                )))
+            })?;
+            Box::new(GitIndexPermissionsSource::new(repo, root.to_path_buf()))
+        }
+        #[cfg(feature = "git")]
+        PermissionsSourceKind::GitTree => {
+            let repo = git2::Repository::open(root).map_err(|e| {
+                crate::error::SwhidError::Io(std::io::Error::other(format!(
+                    "Failed to open Git repository: {}",
+                    e
+                )))
+            })?;
+            Box::new(GitTreePermissionsSource::new(repo, root.to_path_buf()))
+        }
+        PermissionsSourceKind::Manifest => {
+            let manifest_path = opts.permissions_manifest_path.as_ref().ok_or_else(|| {
+                crate::error::SwhidError::InvalidFormat(
+                    "permissions_manifest_path is required when using Manifest source".to_string(),
+                )
+            })?;
+            Box::new(ManifestPermissionsSource::load(manifest_path)?)
+        }
+        #[cfg(not(feature = "git"))]
+        PermissionsSourceKind::GitIndex | PermissionsSourceKind::GitTree => {
+            return Err(crate::error::SwhidError::InvalidFormat(
+                "Git permission sources require the 'git' feature".to_string(),
+            ));
+        }
+        PermissionsSourceKind::Heuristic => {
+            // Heuristic not implemented yet, fall back to filesystem
+            Box::new(FilesystemPermissionsSource)
+        }
+    };
+
     let mut children: Vec<Entry> = Vec::new();
-    for entry in fs::read_dir(path)? {
-        let entry = entry?;
+    for entry in fs::read_dir(path).map_err(|e| {
+        crate::error::SwhidError::Io(std::io::Error::other(format!(
+            "Failed to read directory {}: {}",
+            path.display(),
+            e
+        )))
+    })? {
+        let entry = entry.map_err(|e| {
+            crate::error::SwhidError::Io(std::io::Error::other(format!(
+                "Failed to read directory entry: {}",
+                e
+            )))
+        })?;
         let file_name = entry.file_name();
         let name_bytes = Box::from(file_name.as_os_str().as_encoded_bytes());
 
-        if is_excluded(&name_bytes, opts) {
+        if is_excluded(&name_bytes, &opts.walk_options) {
             continue;
         }
 
-        let md = if opts.follow_symlinks {
-            fs::metadata(entry.path())?
+        let md = if opts.walk_options.follow_symlinks {
+            fs::metadata(entry.path()).map_err(|e| {
+                crate::error::SwhidError::Io(std::io::Error::other(format!(
+                    "Failed to read metadata for {}: {}",
+                    entry.path().display(),
+                    e
+                )))
+            })?
         } else {
-            fs::symlink_metadata(entry.path())?
+            fs::symlink_metadata(entry.path()).map_err(|e| {
+                crate::error::SwhidError::Io(std::io::Error::other(format!(
+                    "Failed to read symlink metadata for {}: {}",
+                    entry.path().display(),
+                    e
+                )))
+            })?
         };
         let ft = md.file_type();
 
         if ft.is_dir() {
-            let nested_entries = read_dir(&entry.path(), opts, hash_config)?;
+            let nested_entries = read_dir(&entry.path(), root, opts, hash_config)?;
             let manifest = dir_manifest(nested_entries)
-                .map_err(|e: DirectoryError| io::Error::other(e))?;
+                .map_err(|e: DirectoryError| {
+                    crate::error::SwhidError::Io(std::io::Error::other(format!(
+                        "Failed to build directory manifest: {}",
+                        e
+                    )))
+                })?;
             let id = if let Some(config) = hash_config {
                 hash_swhid_object_with("tree", &manifest, config.hash_function.as_ref())
             } else {
@@ -175,7 +300,13 @@ fn read_dir(path: &Path, opts: &WalkOptions, hash_config: Option<&HashConfig>) -
             });
         } else if ft.is_symlink() {
             // The content is the link target bytes
-            let target = fs::read_link(entry.path())?;
+            let target = fs::read_link(entry.path()).map_err(|e| {
+                crate::error::SwhidError::Io(std::io::Error::other(format!(
+                    "Failed to read symlink {}: {}",
+                    entry.path().display(),
+                    e
+                )))
+            })?;
             let bytes = target.as_os_str().as_encoded_bytes();
             let id = if let Some(config) = hash_config {
                 hash_content_with(bytes, config.hash_function.as_ref())
@@ -188,13 +319,28 @@ fn read_dir(path: &Path, opts: &WalkOptions, hash_config: Option<&HashConfig>) -
                 id,
             });
         } else if ft.is_file() {
-            let bytes = fs::read(entry.path())?;
+            let bytes = fs::read(entry.path()).map_err(|e| {
+                crate::error::SwhidError::Io(std::io::Error::other(format!(
+                    "Failed to read file {}: {}",
+                    entry.path().display(),
+                    e
+                )))
+            })?;
             let id = if let Some(config) = hash_config {
                 hash_content_with(&bytes, config.hash_function.as_ref())
             } else {
                 hash_content(&bytes).to_vec()
             };
-            let mode = path_file_mode(&md);
+
+            // Use permission source to determine executable bit
+            let exec = permission_source.executable_of(&entry.path())?;
+            let perms = resolve_file_permissions(
+                exec,
+                opts.permissions_policy,
+                &entry.path(),
+            )?;
+            let mode = perms.to_swh_mode_u32();
+
             children.push(Entry {
                 name: name_bytes,
                 mode,
@@ -223,6 +369,17 @@ impl Directory {
         sort_and_check_children(&mut entries)?;
 
         Ok(Self { entries })
+    }
+
+    /// Create a Directory from manifest entries with explicit permissions.
+    ///
+    /// This is the pure manifest-based path that is platform-independent.
+    /// All permission information must be provided in the manifest entries.
+    pub fn from_manifest(
+        entries: impl IntoIterator<Item = ManifestEntry>,
+    ) -> Result<Self, DirectoryError> {
+        let entries: Vec<Entry> = entries.into_iter().map(Entry::from).collect();
+        Self::new(entries)
     }
 
     pub fn entries(&self) -> &[Entry] {
@@ -256,32 +413,46 @@ impl Directory {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DiskDirectoryBuilder<'a> {
     root: &'a Path,
-    opts: WalkOptions,
+    opts: DirectoryBuildOptions,
 }
 
 impl<'a> DiskDirectoryBuilder<'a> {
     /// Create a new Directory object for the given path.
     ///
     /// This implements SWHID v1.2 directory object creation for any directory.
+    /// Uses default options (best-effort policy, auto permission source).
     pub fn new(root: &'a Path) -> Self {
         Self {
             root,
-            opts: WalkOptions::default(),
+            opts: DirectoryBuildOptions {
+                permissions_source: PermissionsSourceKind::Auto,
+                permissions_policy: PermissionPolicy::BestEffort,
+                permissions_manifest_path: None,
+                hash_config: None,
+                walk_options: WalkOptions::default(),
+            },
         }
     }
 
-    /// Configure directory walking options.
-    pub fn with_options(mut self, opts: WalkOptions) -> Self {
+    /// Configure directory building options.
+    pub fn with_build_options(mut self, opts: DirectoryBuildOptions) -> Self {
         self.opts = opts;
         self
     }
 
-    pub fn build(self) -> Result<Directory, io::Error> {
-        Directory::new(read_dir(self.root, &self.opts, None)?)
-            .map_err(|e: DirectoryError| io::Error::other(e))
+    /// Configure directory walking options (backward compatibility).
+    pub fn with_options(mut self, walk_opts: WalkOptions) -> Self {
+        self.opts.walk_options = walk_opts;
+        self
+    }
+
+    pub fn build(self) -> Result<Directory, crate::error::SwhidError> {
+        let entries = read_dir(self.root, self.root, &self.opts, None)?;
+        Directory::new(entries)
+            .map_err(|e| crate::error::SwhidError::Io(std::io::Error::other(e)))
     }
 
     /// Compute the SWHID v1.2 directory identifier for this directory.
@@ -289,7 +460,7 @@ impl<'a> DiskDirectoryBuilder<'a> {
     /// This implements the SWHID v1.2 directory hashing algorithm, which
     /// is compatible with Git's tree format for directory objects.
     pub fn swhid(&self) -> Result<Swhid, crate::error::SwhidError> {
-        let entries = read_dir(self.root, &self.opts, None).map_err(crate::error::SwhidError::Io)?;
+        let entries = read_dir(self.root, self.root, &self.opts, None)?;
         Directory::new(entries)
             .map_err(|e| crate::error::SwhidError::Io(std::io::Error::other(e)))?
             .swhid()
@@ -300,7 +471,7 @@ impl<'a> DiskDirectoryBuilder<'a> {
     /// This allows computing SWHIDs with different hash functions (SHA1, SHA256, etc.)
     /// and serialization formats (hex, base64, etc.) for v2 experimentation.
     pub fn swhid_with_config(&self, config: &HashConfig) -> Result<Swhid, crate::error::SwhidError> {
-        let entries = read_dir(self.root, &self.opts, Some(config)).map_err(crate::error::SwhidError::Io)?;
+        let entries = read_dir(self.root, self.root, &self.opts, Some(config))?;
         Directory::new(entries)
             .map_err(|e| crate::error::SwhidError::Io(std::io::Error::other(e)))?
             .swhid_with_config(config)
