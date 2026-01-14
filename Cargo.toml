@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2021"
 license = "MIT"
 description = "SWHID v1.2 reference implementation - Complete SWHID (ISO/IEC 18670:2025) parsing and hashing with VCS integration"
-repository = "https://example.org/swhid-rs"
+repository = "https://github.com/swhid/swhid-rs"
 keywords = ["swhid", "iso18670", "software-heritage", "identifier", "hash"]
 categories = ["encoding", "data-structures", "parsing"]
 
