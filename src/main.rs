@@ -14,6 +14,7 @@ use swhid::git;
 #[derive(Parser, Debug)]
 #[command(name = "swhid")]
 #[command(about = "Compute and parse SWHIDs (ISO/IEC 18670)")]
+#[command(version)]
 struct Cli {
     #[command(subcommand)]
     cmd: Command,

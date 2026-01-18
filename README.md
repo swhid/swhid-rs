@@ -81,15 +81,15 @@ use std::path::PathBuf;
     use swhid::git;
 
     let repo = git::open_repo(&PathBuf::from("/path/to/git/repo"))?;
-    
+
     // Get HEAD commit SWHID v1.2
     let head_commit = git::get_head_commit(&repo)?;
     let revision_swhid = git::revision_swhid(&repo, &head_commit)?;
-    
+
     // Get tag SWHID v1.2
     let tag_oid = repo.refname_to_id("refs/tags/v1.0.0")?;
     let release_swhid = git::release_swhid(&repo, &tag_oid)?;
-    
+
     // Get snapshot SWHID v1.2
     let snapshot_swhid = git::snapshot_swhid(&repo)?;
 }
@@ -106,20 +106,20 @@ echo "Hello, World!" | swhid content
 
 # Directory SWHIDs
 swhid dir .
-swhid dir --exclude-suffix .tmp --exclude-suffix .log /path/to/project
+swhid dir --exclude .tmp --exclude .log /path/to/project
 
 # VCS SWHIDs (requires --features git)
-swhid git revision --repo /path/to/git/repo
-swhid git release --repo /path/to/git/repo --tag v1.0.0
-swhid git snapshot --repo /path/to/git/repo
-swhid git tags --repo /path/to/git/repo
+swhid git revision /path/to/git/repo [COMMIT]
+swhid git release /path/to/git/repo v1.0.0
+swhid git snapshot /path/to/git/repo
+swhid git tags /path/to/git/repo
 
 # Parse and validate SWHIDs
 swhid parse 'swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391'
 swhid parse 'swh:1:dir:...;origin=https://github.com/user/repo;path=/src/main.rs;lines=10-20'
 
 # Verify SWHIDs
-swhid verify --file README.md --expected 'swh:1:cnt:...'
+swhid verify README.md 'swh:1:cnt:...'
 ```
 
 ## License
