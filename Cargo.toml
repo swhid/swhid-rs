@@ -1,6 +1,6 @@
 [package]
 name = "swhid"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 license = "MIT"
 description = "SWHID v1.2 reference implementation - Complete SWHID (ISO/IEC 18670:2025) parsing and hashing with VCS integration"
