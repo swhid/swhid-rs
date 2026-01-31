@@ -87,6 +87,70 @@ fn test_revision_swhid() {
 }
 
 #[test]
+fn test_revision_negative_timezone() {
+    let tmp = assert_fs::TempDir::new().unwrap();
+    let repo = Repository::init(tmp.path()).unwrap();
+
+    // Create content
+    let mut index = repo.index().unwrap();
+    let file_path = tmp.child("test.txt");
+    file_path.write_str("test content").unwrap();
+
+    // Create directory
+    index
+        .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
+        .unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+        .unwrap()
+        .try_into()
+        .unwrap();
+    assert_eq!(oid_to_array(tree_oid), tree_hash);
+    let tree = repo.find_tree(tree_oid).unwrap();
+
+    // Create commit
+    let sig = Signature::new(
+        "Test User",
+        "test@example.com",
+        &Time::new(1763027354, -420),
+    )
+    .unwrap();
+    let commit_oid = repo
+        .commit(
+            Some("refs/heads/main"),
+            &sig,
+            &sig,
+            "Test commit",
+            &tree,
+            &[],
+        )
+        .unwrap();
+
+    let rev = revision_from_git(&repo, &commit_oid).unwrap();
+    assert_eq!(
+        rev,
+        Revision {
+            directory: tree_hash,
+            parents: Vec::new(),
+            author: bs("Test User <test@example.com>"),
+            author_timestamp: 1763027354,
+            author_timestamp_offset: bs("-0700"),
+            committer: bs("Test User <test@example.com>"),
+            committer_timestamp: 1763027354,
+            committer_timestamp_offset: bs("-0700"),
+            extra_headers: Vec::new(),
+            message: Some(bs("Test commit")),
+        }
+    );
+
+    let swhid = revision_swhid(&repo, &commit_oid).unwrap();
+    assert_eq!(
+        swhid.to_string(),
+        "swh:1:rev:927b3b4a8291765c874d26560da492de7b3d9091"
+    );
+}
+
+#[test]
 fn test_signed_revision_swhid() {
     let tmp = assert_fs::TempDir::new().unwrap();
     let repo = Repository::init(tmp.path()).unwrap();
