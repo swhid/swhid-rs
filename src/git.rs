@@ -41,10 +41,10 @@ fn parse_signature(sig: Signature) -> (Bytestring, i64, Bytestring) {
     full_name.push(b'>');
 
     let when = sig.when();
-    let offset_minutes = when.offset_minutes();
+    let sign = when.sign();
+    let offset_minutes = when.offset_minutes().abs();
     let offset_hours = offset_minutes / 60;
     let offset_minutes = offset_minutes % 60;
-    let sign = when.sign();
     let offset = format!("{sign}{offset_hours:02}{offset_minutes:02}");
 
     (full_name.into(), when.seconds(), offset.into_bytes().into())
