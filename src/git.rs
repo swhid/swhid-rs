@@ -9,7 +9,9 @@
 //! This module implements the SWHID v1.2 specification for VCS objects,
 //! using Git as the reference VCS implementation.
 
+use crate::directory::{dir_manifest, Entry as DirEntry};
 use crate::error::SwhidError;
+use crate::hash::{hash_content, hash_swhid_object};
 use crate::Swhid;
 use std::path::Path;
 
@@ -28,6 +30,46 @@ fn oid_to_array(oid: git2::Oid) -> Result<[u8; 20], SwhidError> {
     oid.as_bytes()
         .try_into()
         .map_err(|e| io_error(format!("Unexpected tree_oid length: {e}")))
+}
+
+/// Content SWHID digest (20 bytes) from a Git blob OID.
+/// Per spec 5.2: intrinsic identifier is hash of blob object format.
+fn content_swhid_from_blob(repo: &Repository, blob_oid: git2::Oid) -> Result<[u8; 20], SwhidError> {
+    let blob = repo
+        .find_blob(blob_oid)
+        .map_err(|e| io_error(format!("Failed to find blob {blob_oid}: {e}")))?;
+    let bytes = blob.content();
+    Ok(hash_content(bytes))
+}
+
+/// Directory SWHID digest (20 bytes) from a Git tree OID.
+/// Per spec 5.3: compute SWHID of each entry (content or directory), then manifest.
+fn directory_swhid_from_tree(
+    repo: &Repository,
+    tree_oid: git2::Oid,
+) -> Result<[u8; 20], SwhidError> {
+    let tree = repo
+        .find_tree(tree_oid)
+        .map_err(|e| io_error(format!("Failed to find tree {tree_oid}: {e}")))?;
+    let mut entries: Vec<DirEntry> = Vec::new();
+    for entry in tree.iter() {
+        let name = entry.name_bytes().to_owned().into_boxed_slice();
+        let mode = entry.filemode() as u32;
+        let id = match entry.kind() {
+            Some(GitObjectType::Blob) => content_swhid_from_blob(repo, entry.id())?,
+            Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, entry.id())?,
+            _ => {
+                return Err(io_error(format!(
+                    "Tree entry {:?} has unsupported type",
+                    entry.name()
+                )));
+            }
+        };
+        entries.push(DirEntry::new(name, mode, id));
+    }
+    let manifest = dir_manifest(entries)
+        .map_err(|e| io_error(format!("Directory manifest: {e}")))?;
+    Ok(hash_swhid_object("tree", &manifest))
 }
 
 fn parse_signature(sig: Signature) -> (Bytestring, i64, Bytestring) {
