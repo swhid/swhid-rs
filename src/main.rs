@@ -1,5 +1,7 @@
-use clap::{Parser, Subcommand};
+use std::collections::HashMap;
 use std::path::PathBuf;
+
+use clap::{Parser, Subcommand};
 
 use swhid::{
     Content, DirectoryBuildOptions, DiskDirectoryBuilder, PermissionPolicy, PermissionsSourceKind,
@@ -265,7 +267,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 } else {
                     git::get_head_commit(&repo)?
                 };
-                let swhid = git::revision_swhid(&repo, &commit_oid)?;
+                let swhid = git::revision_swhid(&repo, &commit_oid, &mut HashMap::new())?;
                 println!("{swhid}");
             }
             GitCommand::Release { repo, tag } => {

@@ -152,8 +152,12 @@ fn parse_header(mut manifest: &[u8]) -> Result<Vec<(&[u8], Bytestring)>, SwhidEr
 ///
 /// This implements the SWHID v1.2 revision hashing algorithm for Git commits,
 /// creating a `swh:1:rev:<digest>` identifier according to the specification.
-pub fn revision_swhid(repo: &Repository, commit_oid: &git2::Oid) -> Result<Swhid, SwhidError> {
-    revision_from_git(repo, commit_oid, &mut HashMap::new()).map(|rev| rev.swhid())
+pub fn revision_swhid(
+    repo: &Repository,
+    commit_oid: &git2::Oid,
+    cache: &mut HashMap<git2::Oid, [u8; 20]>,
+) -> Result<Swhid, SwhidError> {
+    revision_from_git(repo, commit_oid, cache).map(|rev| rev.swhid())
 }
 
 #[doc(hidden)]
@@ -177,7 +181,7 @@ pub fn revision_from_git(
         .map(|p| match cache.entry(p.id()) {
             Entry::Occupied(e) => Ok(*e.get()),
             Entry::Vacant(_) => {
-                let swhid = *revision_swhid(repo, &p.id())?.digest_bytes();
+                let swhid = *revision_swhid(repo, &p.id(), cache)?.digest_bytes();
                 cache.insert(p.id(), swhid);
                 Ok(swhid)
             }
@@ -231,7 +235,9 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
         .map_err(|e| io_error(format!("Failed to get tag target: {e}")))?;
     let target_oid = target.id();
     let object = match target.kind() {
-        Some(GitObjectType::Commit) => *revision_swhid(repo, &target_oid)?.digest_bytes(),
+        Some(GitObjectType::Commit) => {
+            *revision_swhid(repo, &target_oid, &mut HashMap::new())?.digest_bytes()
+        }
         Some(GitObjectType::Tree) => {
             directory_swhid_from_tree(repo, target_oid, &mut HashMap::new())?
         }
@@ -285,9 +291,10 @@ pub fn snapshot_from_git(repo: &Repository) -> Result<Snapshot, SwhidError> {
         .references()
         .map_err(|e| io_error(format!("Failed to list references: {e}")))?;
 
+    let mut cache = HashMap::new();
     let mut branches: Vec<_> = references
         .flat_map(|reference| match reference {
-            Ok(reference) => reference_to_branch(repo, reference).transpose(),
+            Ok(reference) => reference_to_branch(repo, reference, &mut cache).transpose(),
             Err(e) => Some(Err(io_error(format!("Failed to read reference: {e}")))),
         })
         .collect::<Result<_, _>>()?;
@@ -295,7 +302,7 @@ pub fn snapshot_from_git(repo: &Repository) -> Result<Snapshot, SwhidError> {
     let head = repo
         .head()
         .map_err(|e| io_error(format!("Failed to get HEAD: {e}")))?;
-    if let Some(head_branch) = reference_to_branch(repo, head)? {
+    if let Some(head_branch) = reference_to_branch(repo, head, &mut cache)? {
         let Branch { name, target: _ } = head_branch;
         branches.push(Branch {
             name: (*b"HEAD").into(),
@@ -309,6 +316,7 @@ pub fn snapshot_from_git(repo: &Repository) -> Result<Snapshot, SwhidError> {
 fn reference_to_branch(
     repo: &Repository,
     reference: git2::Reference<'_>,
+    cache: &mut HashMap<git2::Oid, [u8; 20]>,
 ) -> Result<Option<Branch>, SwhidError> {
     if !reference.is_branch() && !reference.is_tag() {
         return Ok(None);
@@ -365,15 +373,18 @@ fn reference_to_branch(
                 }
                 Some(git2::ObjectType::Any) => panic!("git2 returned an object with type 'Any'"),
                 Some(git2::ObjectType::Commit) => {
-                    let digest = *revision_swhid(repo, &target_id)?.digest_bytes();
+                    let digest = *revision_swhid(repo, &target_id, cache)?.digest_bytes();
                     BranchTarget::Revision(Some(digest))
                 }
                 Some(git2::ObjectType::Tree) => {
-                    let digest = directory_swhid_from_tree(repo, target_id, &mut HashMap::new())?;
+                    let digest = directory_swhid_from_tree(repo, target_id, cache)?;
                     BranchTarget::Directory(Some(digest))
                 }
                 Some(git2::ObjectType::Blob) => {
-                    let digest = content_swhid_from_blob(repo, target_id)?;
+                    let digest = match cache.entry(target_id) {
+                        Entry::Occupied(e) => *e.get(),
+                        Entry::Vacant(e) => *e.insert(content_swhid_from_blob(repo, target_id)?),
+                    };
                     BranchTarget::Content(Some(digest))
                 }
                 Some(git2::ObjectType::Tag) => {
