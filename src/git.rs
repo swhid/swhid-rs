@@ -63,8 +63,8 @@ fn directory_swhid_from_tree(
         };
         entries.push(DirEntry::new(name, mode, id));
     }
-    let manifest = dir_manifest(entries)
-        .map_err(|e| io_error(format!("Directory manifest: {e}")))?;
+    let manifest =
+        dir_manifest(entries).map_err(|e| io_error(format!("Directory manifest: {e}")))?;
     Ok(hash_swhid_object("tree", &manifest))
 }
 
@@ -210,9 +210,7 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
         .map_err(|e| io_error(format!("Failed to get tag target: {e}")))?;
     let target_oid = target.id();
     let object = match target.kind() {
-        Some(GitObjectType::Commit) => {
-            *revision_swhid(repo, &target_oid)?.digest_bytes()
-        }
+        Some(GitObjectType::Commit) => *revision_swhid(repo, &target_oid)?.digest_bytes(),
         Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, target_oid)?,
         Some(GitObjectType::Blob) => content_swhid_from_blob(repo, target_oid)?,
         Some(GitObjectType::Tag) => *release_swhid(repo, &target_oid)?.digest_bytes(),
