@@ -26,12 +26,6 @@ fn io_error(msg: String) -> SwhidError {
     SwhidError::Io(std::io::Error::other(msg))
 }
 
-fn oid_to_array(oid: git2::Oid) -> Result<[u8; 20], SwhidError> {
-    oid.as_bytes()
-        .try_into()
-        .map_err(|e| io_error(format!("Unexpected tree_oid length: {e}")))
-}
-
 /// Content SWHID digest (20 bytes) from a Git blob OID.
 /// Per spec 5.2: intrinsic identifier is hash of blob object format.
 fn content_swhid_from_blob(repo: &Repository, blob_oid: git2::Oid) -> Result<[u8; 20], SwhidError> {
@@ -340,22 +334,31 @@ fn reference_to_branch(
                     return Err(io_error(format!("Could not find object {target_id}: {e}")));
                 }
             };
-            let target_id = oid_to_array(target_id)?;
-            match target.kind() {
+            let target = match target.kind() {
                 None => {
-                    // Dangling reference.
-                    //
-                    // FIXME: We need to define a type (because of
-                    // https://github.com/swhid/specification/issues/64), so let's assume it's
-                    // a commit.
-                    BranchTarget::Revision(Some(target_id))
+                    // Dangling reference (object has no kind).
+                    // FIXME: https://github.com/swhid/specification/issues/64
+                    BranchTarget::Revision(None)
                 }
                 Some(git2::ObjectType::Any) => panic!("git2 returned an object with type 'Any'"),
-                Some(git2::ObjectType::Commit) => BranchTarget::Revision(Some(target_id)),
-                Some(git2::ObjectType::Tree) => BranchTarget::Directory(Some(target_id)),
-                Some(git2::ObjectType::Blob) => BranchTarget::Content(Some(target_id)),
-                Some(git2::ObjectType::Tag) => BranchTarget::Release(Some(target_id)),
-            }
+                Some(git2::ObjectType::Commit) => {
+                    let digest = *revision_swhid(repo, &target_id)?.digest_bytes();
+                    BranchTarget::Revision(Some(digest))
+                }
+                Some(git2::ObjectType::Tree) => {
+                    let digest = directory_swhid_from_tree(repo, target_id)?;
+                    BranchTarget::Directory(Some(digest))
+                }
+                Some(git2::ObjectType::Blob) => {
+                    let digest = content_swhid_from_blob(repo, target_id)?;
+                    BranchTarget::Content(Some(digest))
+                }
+                Some(git2::ObjectType::Tag) => {
+                    let digest = *release_swhid(repo, &target_id)?.digest_bytes();
+                    BranchTarget::Release(Some(digest))
+                }
+            };
+            target
         }
         Some(git2::ReferenceType::Symbolic) => {
             let Some(target) = reference.symbolic_target_bytes() else {
