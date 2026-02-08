@@ -11,18 +11,20 @@
 //! branches use revision/release/directory/content SWHIDs; directory from
 //! tree uses content/directory SWHIDs for entries.
 
-use crate::directory::{dir_manifest, Entry as DirEntry};
-use crate::error::SwhidError;
-use crate::hash::{hash_content, hash_swhid_object};
-use crate::Swhid;
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 use std::path::Path;
 
 use git2::{ObjectType as GitObjectType, Repository, Signature};
 
+use crate::directory::{dir_manifest, Entry as DirEntry};
+use crate::error::SwhidError;
+use crate::hash::{hash_content, hash_swhid_object};
 use crate::release::Release;
 use crate::revision::Revision;
 use crate::snapshot::{Branch, BranchTarget, Snapshot};
 use crate::Bytestring;
+use crate::Swhid;
 
 fn io_error(msg: String) -> SwhidError {
     SwhidError::Io(std::io::Error::other(msg))
@@ -43,6 +45,7 @@ fn content_swhid_from_blob(repo: &Repository, blob_oid: git2::Oid) -> Result<[u8
 fn directory_swhid_from_tree(
     repo: &Repository,
     tree_oid: git2::Oid,
+    cache: &mut HashMap<git2::Oid, [u8; 20]>,
 ) -> Result<[u8; 20], SwhidError> {
     let tree = repo
         .find_tree(tree_oid)
@@ -52,8 +55,18 @@ fn directory_swhid_from_tree(
         let name = entry.name_bytes().to_owned().into_boxed_slice();
         let mode = entry.filemode() as u32;
         let id = match entry.kind() {
-            Some(GitObjectType::Blob) => content_swhid_from_blob(repo, entry.id())?,
-            Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, entry.id())?,
+            Some(GitObjectType::Blob) => match cache.entry(entry.id()) {
+                Entry::Occupied(e) => *e.get(),
+                Entry::Vacant(e) => *e.insert(content_swhid_from_blob(repo, entry.id())?),
+            },
+            Some(GitObjectType::Tree) => match cache.entry(entry.id()) {
+                Entry::Occupied(e) => *e.get(),
+                Entry::Vacant(_) => {
+                    let swhid = directory_swhid_from_tree(repo, entry.id(), cache)?;
+                    cache.insert(entry.id(), swhid);
+                    swhid
+                }
+            },
             _ => {
                 return Err(io_error(format!(
                     "Tree entry {:?} has unsupported type",
@@ -140,13 +153,14 @@ fn parse_header(mut manifest: &[u8]) -> Result<Vec<(&[u8], Bytestring)>, SwhidEr
 /// This implements the SWHID v1.2 revision hashing algorithm for Git commits,
 /// creating a `swh:1:rev:<digest>` identifier according to the specification.
 pub fn revision_swhid(repo: &Repository, commit_oid: &git2::Oid) -> Result<Swhid, SwhidError> {
-    revision_from_git(repo, commit_oid).map(|rev| rev.swhid())
+    revision_from_git(repo, commit_oid, &mut HashMap::new()).map(|rev| rev.swhid())
 }
 
 #[doc(hidden)]
 pub fn revision_from_git(
     repo: &Repository,
     commit_oid: &git2::Oid,
+    cache: &mut HashMap<git2::Oid, [u8; 20]>,
 ) -> Result<Revision, SwhidError> {
     let commit = repo
         .find_commit(*commit_oid)
@@ -157,10 +171,17 @@ pub fn revision_from_git(
         .map_err(|e| io_error(format!("Failed to get commit tree: {e}")))?;
 
     let tree_oid = tree.id();
-    let directory = directory_swhid_from_tree(repo, tree_oid)?;
+    let directory = directory_swhid_from_tree(repo, tree_oid, cache)?;
     let parents: Vec<[u8; 20]> = commit
         .parents()
-        .map(|p| revision_swhid(repo, &p.id()).map(|s| *s.digest_bytes()))
+        .map(|p| match cache.entry(p.id()) {
+            Entry::Occupied(e) => Ok(*e.get()),
+            Entry::Vacant(_) => {
+                let swhid = *revision_swhid(repo, &p.id())?.digest_bytes();
+                cache.insert(p.id(), swhid);
+                Ok(swhid)
+            }
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     let (author, author_timestamp, author_timestamp_offset) = parse_signature(commit.author());
@@ -211,7 +232,9 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
     let target_oid = target.id();
     let object = match target.kind() {
         Some(GitObjectType::Commit) => *revision_swhid(repo, &target_oid)?.digest_bytes(),
-        Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, target_oid)?,
+        Some(GitObjectType::Tree) => {
+            directory_swhid_from_tree(repo, target_oid, &mut HashMap::new())?
+        }
         Some(GitObjectType::Blob) => content_swhid_from_blob(repo, target_oid)?,
         Some(GitObjectType::Tag) => *release_swhid(repo, &target_oid)?.digest_bytes(),
         _ => return Err(io_error("Unknown target type".to_string())),
@@ -346,7 +369,7 @@ fn reference_to_branch(
                     BranchTarget::Revision(Some(digest))
                 }
                 Some(git2::ObjectType::Tree) => {
-                    let digest = directory_swhid_from_tree(repo, target_id)?;
+                    let digest = directory_swhid_from_tree(repo, target_id, &mut HashMap::new())?;
                     BranchTarget::Directory(Some(digest))
                 }
                 Some(git2::ObjectType::Blob) => {

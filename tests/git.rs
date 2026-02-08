@@ -1,5 +1,7 @@
 #![cfg(feature = "git")]
 
+use std::collections::HashMap;
+
 use assert_fs::prelude::*;
 use git2::{Repository, Signature, Time};
 
@@ -53,7 +55,7 @@ fn test_revision_swhid() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid).unwrap();
+    let rev = revision_from_git(&repo, &commit_oid, &mut HashMap::new()).unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -126,7 +128,7 @@ fn test_revision_negative_timezone() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid).unwrap();
+    let rev = revision_from_git(&repo, &commit_oid, &mut HashMap::new()).unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -186,7 +188,7 @@ fn test_signed_revision_swhid() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid).unwrap();
+    let rev = revision_from_git(&repo, &commit_oid, &mut HashMap::new()).unwrap();
     assert_eq!(
         rev,
         Revision {
