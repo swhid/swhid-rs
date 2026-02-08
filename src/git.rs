@@ -161,6 +161,11 @@ pub fn revision_from_git(
         .map_err(|e| io_error(format!("Failed to get commit tree: {e}")))?;
 
     let tree_oid = tree.id();
+    let directory = directory_swhid_from_tree(repo, tree_oid)?;
+    let parents: Vec<[u8; 20]> = commit
+        .parents()
+        .map(|p| revision_swhid(repo, &p.id()).map(|s| *s.digest_bytes()))
+        .collect::<Result<Vec<_>, _>>()?;
 
     let (author, author_timestamp, author_timestamp_offset) = parse_signature(commit.author());
     let (committer, committer_timestamp, committer_timestamp_offset) =
@@ -175,11 +180,8 @@ pub fn revision_from_git(
         .collect();
 
     Ok(Revision {
-        directory: oid_to_array(tree_oid)?,
-        parents: commit
-            .parents()
-            .map(|parent| oid_to_array(parent.id()))
-            .collect::<Result<_, _>>()?,
+        directory,
+        parents,
         author,
         author_timestamp,
         author_timestamp_offset,
