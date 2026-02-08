@@ -6,8 +6,10 @@
 //! - Release SWHIDs (tags) - `swh:1:rel:<digest>`
 //! - Snapshot SWHIDs (repository state) - `swh:1:snp:<digest>`
 //!
-//! This module implements the SWHID v1.2 specification for VCS objects,
-//! using Git as the reference VCS implementation.
+//! Computation is recursive per the spec: revision manifests use directory
+//! SWHID and parent revision SWHIDs; release uses target SWHID; snapshot
+//! branches use revision/release/directory/content SWHIDs; directory from
+//! tree uses content/directory SWHIDs for entries.
 
 use crate::directory::{dir_manifest, Entry as DirEntry};
 use crate::error::SwhidError;
