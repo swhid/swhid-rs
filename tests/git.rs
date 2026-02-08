@@ -406,15 +406,8 @@ fn test_snapshot_swhid_with_dangling_branch() {
     let tree_oid = index.write_tree().unwrap();
     let tree = repo.find_tree(tree_oid).unwrap();
     let sig = Signature::new("U", "u@x", &Time::new(1763027354, 60)).unwrap();
-    repo.commit(
-        Some("refs/heads/main"),
-        &sig,
-        &sig,
-        "commit",
-        &tree,
-        &[],
-    )
-    .unwrap();
+    repo.commit(Some("refs/heads/main"), &sig, &sig, "commit", &tree, &[])
+        .unwrap();
     repo.set_head("refs/heads/main").unwrap();
 
     // Dangling ref: write ref file pointing to an OID that does not exist in the object store.
@@ -427,7 +420,10 @@ fn test_snapshot_swhid_with_dangling_branch() {
     let snp = snapshot_from_git(&repo).unwrap();
     let branches: Vec<_> = snp.branches().to_vec();
     assert!(
-        branches.iter().any(|b| b.name.as_ref() == b"refs/heads/dangling" && matches!(b.target, BranchTarget::Revision(None))),
+        branches
+            .iter()
+            .any(|b| b.name.as_ref() == b"refs/heads/dangling"
+                && matches!(b.target, BranchTarget::Revision(None))),
         "snapshot should contain dangling branch with empty target; got {:?}",
         branches
     );
