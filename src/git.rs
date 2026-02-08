@@ -272,9 +272,20 @@ fn reference_to_branch(
                     String::from_utf8_lossy(&name)
                 )));
             };
-            let target = repo
-                .find_object(target_id, None)
-                .map_err(|e| io_error(format!("Could not find object {target_id}: {e}")))?;
+            let target = match repo.find_object(target_id, None) {
+                Ok(obj) => obj,
+                Err(e) if e.code() == git2::ErrorCode::NotFound => {
+                    // Dangling branch (ref points to missing object). SWHID v1.2 Clause 5.6:
+                    // "for dangling branches, the empty string".
+                    return Ok(Some(Branch {
+                        name,
+                        target: BranchTarget::Revision(None),
+                    }));
+                }
+                Err(e) => {
+                    return Err(io_error(format!("Could not find object {target_id}: {e}")));
+                }
+            };
             let target_id = oid_to_array(target_id)?;
             match target.kind() {
                 None => {

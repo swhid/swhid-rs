@@ -324,3 +324,49 @@ fn test_snapshot_swhid() {
         "swh:1:snp:a0bfd8450daaf74c55c2375f21e40745bc5f95b7"
     );
 }
+
+/// Snapshot with a dangling branch (ref pointing to a missing object) is computed successfully;
+/// the dangling branch is included with empty target per SWHID v1.2 Clause 5.6.
+#[test]
+fn test_snapshot_swhid_with_dangling_branch() {
+    let tmp = assert_fs::TempDir::new().unwrap();
+    let repo = Repository::init(tmp.path()).unwrap();
+
+    // One valid commit so the repo has normal refs and HEAD.
+    let mut index = repo.index().unwrap();
+    let file_path = tmp.child("f.txt");
+    file_path.write_str("x").unwrap();
+    index
+        .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
+        .unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = Signature::new("U", "u@x", &Time::new(1763027354, 60)).unwrap();
+    repo.commit(
+        Some("refs/heads/main"),
+        &sig,
+        &sig,
+        "commit",
+        &tree,
+        &[],
+    )
+    .unwrap();
+    repo.set_head("refs/heads/main").unwrap();
+
+    // Dangling ref: write ref file pointing to an OID that does not exist in the object store.
+    // (git2 refuses to create such a ref via API, so we write the ref file directly.)
+    let git_dir = tmp.path().join(".git");
+    let ref_path = git_dir.join("refs/heads/dangling");
+    std::fs::create_dir_all(ref_path.parent().unwrap()).unwrap();
+    std::fs::write(&ref_path, "0000000000000000000000000000000000000000\n").unwrap();
+
+    let snp = snapshot_from_git(&repo).unwrap();
+    let branches: Vec<_> = snp.branches().to_vec();
+    assert!(
+        branches.iter().any(|b| b.name.as_ref() == b"refs/heads/dangling" && matches!(b.target, BranchTarget::Revision(None))),
+        "snapshot should contain dangling branch with empty target; got {:?}",
+        branches
+    );
+    // Snapshot computation must not fail; SWHID is stable for this repo.
+    let _ = snapshot_swhid(&repo).unwrap();
+}
