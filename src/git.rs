@@ -213,6 +213,22 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
         .target()
         .map_err(|e| io_error(format!("Failed to get tag target: {e}")))?;
     let target_oid = target.id();
+    let object = match target.kind() {
+        Some(GitObjectType::Commit) => {
+            *revision_swhid(repo, &target_oid)?.digest_bytes()
+        }
+        Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, target_oid)?,
+        Some(GitObjectType::Blob) => content_swhid_from_blob(repo, target_oid)?,
+        Some(GitObjectType::Tag) => *release_swhid(repo, &target_oid)?.digest_bytes(),
+        _ => return Err(io_error("Unknown target type".to_string())),
+    };
+    let object_type = match target.kind() {
+        Some(GitObjectType::Commit) => ReleaseTargetType::Revision,
+        Some(GitObjectType::Tree) => ReleaseTargetType::Directory,
+        Some(GitObjectType::Blob) => ReleaseTargetType::Content,
+        Some(GitObjectType::Tag) => ReleaseTargetType::Release,
+        _ => return Err(io_error("Unknown target type".to_string())),
+    };
 
     let (author, author_timestamp, author_timestamp_offset) = match tag.tagger() {
         Some(tagger) => {
@@ -227,14 +243,8 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
     };
 
     Ok(Release {
-        object: oid_to_array(target_oid)?,
-        object_type: match target.kind() {
-            Some(GitObjectType::Commit) => ReleaseTargetType::Revision,
-            Some(GitObjectType::Tree) => ReleaseTargetType::Directory,
-            Some(GitObjectType::Blob) => ReleaseTargetType::Content,
-            Some(GitObjectType::Tag) => ReleaseTargetType::Release,
-            _ => return Err(io_error("Unknown target type".to_string())),
-        },
+        object,
+        object_type,
         name: tag.name_bytes().into(),
         author,
         author_timestamp,
