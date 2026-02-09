@@ -11,7 +11,9 @@ pub mod permissions;
 pub mod qualifier;
 pub mod release;
 pub mod revision;
+pub mod serialization;
 pub mod snapshot;
+pub mod types;
 mod utils;
 
 pub use content::Content;
@@ -25,7 +27,9 @@ pub use permissions::{
 pub use qualifier::{ByteRange, LineRange, QualifiedSwhid};
 pub use release::{Release, ReleaseTargetType};
 pub use revision::Revision;
+pub use serialization::{DigestSerializer, HexSerializer};
 pub use snapshot::{Branch, BranchTarget, Snapshot};
+pub use types::{Encoding, HashAlgorithm, SwhidVersion};
 
 #[cfg(feature = "serde")]
 pub use serde::{Deserialize, Serialize};
