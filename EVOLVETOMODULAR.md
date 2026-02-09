@@ -25,3 +25,14 @@ Goal: introduce plugin types and implementations (HashFunction, DigestSerializer
 - **Updated** `src/revision.rs`: `rev_manifest` uses `HexSerializer.encode` for tree and parent digests.
 - **Updated** `src/release.rs`: `rel_manifest` uses `HexSerializer.encode` for object digest.
 - Behavior unchanged; all tests pass.
+
+### Validation gate (Stage 1 complete)
+
+- **cargo test**: All 106 lib tests + integration tests pass.
+- **swhid-rs-tools**: With `SWHID_RS_PATH=/path/to/swhid-rs`, `./tools/test_rust.sh`:
+  - content: 6/6 passed
+  - directory: 5/5 passed
+  - revision: 13/13 passed
+  - release: 11/11 passed
+  - snapshot: category not in harness config (no payloads); rust binary runs.
+- **Checklist**: No new public API; `Swhid`, `hash_content`, `hash_swhid_object` unchanged; only SHA1 and Hex in use. Stage 1 done.
