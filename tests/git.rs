@@ -33,11 +33,11 @@ fn test_revision_swhid() {
         .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: Vec<u8> = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(tree_oid), tree_hash);
+    assert_eq!(oid_to_array(tree_oid).as_slice(), tree_hash.as_slice());
     let tree = repo.find_tree(tree_oid).unwrap();
 
     // Create commit
@@ -57,7 +57,7 @@ fn test_revision_swhid() {
     assert_eq!(
         rev,
         Revision {
-            directory: tree_hash,
+            directory: tree_hash.to_vec(),
             parents: Vec::new(),
             author: bs("Test User <test@example.com>"),
             author_timestamp: 1763027354,
@@ -101,11 +101,11 @@ fn test_revision_negative_timezone() {
         .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: Vec<u8> = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(tree_oid), tree_hash);
+    assert_eq!(oid_to_array(tree_oid).as_slice(), tree_hash.as_slice());
     let tree = repo.find_tree(tree_oid).unwrap();
 
     // Create commit
@@ -130,7 +130,7 @@ fn test_revision_negative_timezone() {
     assert_eq!(
         rev,
         Revision {
-            directory: tree_hash,
+            directory: tree_hash.to_vec(),
             parents: Vec::new(),
             author: bs("Test User <test@example.com>"),
             author_timestamp: 1763027354,
@@ -165,11 +165,11 @@ fn test_signed_revision_swhid() {
         .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: Vec<u8> = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(tree_oid), tree_hash);
+    assert_eq!(oid_to_array(tree_oid).as_slice(), tree_hash.as_slice());
     let tree = repo.find_tree(tree_oid).unwrap();
 
     // Create commit
@@ -190,7 +190,7 @@ fn test_signed_revision_swhid() {
     assert_eq!(
         rev,
         Revision {
-            directory: tree_hash,
+            directory: tree_hash.to_vec(),
             parents: Vec::new(),
             author: bs("Test User <test@example.com>"),
             author_timestamp: 1763027354,
@@ -234,11 +234,11 @@ fn test_release_swhid() {
         .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: Vec<u8> = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(tree_oid), tree_hash);
+    assert_eq!(oid_to_array(tree_oid).as_slice(), tree_hash.as_slice());
     let tree = repo.find_tree(tree_oid).unwrap();
 
     // Create tag
@@ -257,7 +257,7 @@ fn test_release_swhid() {
     assert_eq!(
         rev,
         Release {
-            object: tree_hash,
+            object: tree_hash.to_vec(),
             object_type: ReleaseTargetType::Directory,
             name: bs("v1.0"),
             author: Some(bs("Test User <test@example.com>")),
@@ -299,11 +299,11 @@ fn test_snapshot_swhid() {
         .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: Vec<u8> = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(tree_oid), tree_hash);
+    assert_eq!(oid_to_array(tree_oid).as_slice(), tree_hash.as_slice());
     let tree = repo.find_tree(tree_oid).unwrap();
 
     // Add reference directly to a tree
@@ -327,11 +327,11 @@ fn test_snapshot_swhid() {
             &[],
         )
         .unwrap();
-    let commit_hash = hex::decode("07cde6575fb633ef9b5ecbe730e6eb97475a2fd9")
+    let commit_hash: Vec<u8> = hex::decode("07cde6575fb633ef9b5ecbe730e6eb97475a2fd9")
         .unwrap()
         .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(commit_oid), commit_hash);
+    assert_eq!(oid_to_array(commit_oid).as_slice(), commit_hash.as_slice());
 
     // Create tag
     let tag_oid = repo
@@ -343,11 +343,11 @@ fn test_snapshot_swhid() {
             /* force: */ false,
         )
         .unwrap();
-    let tag_hash = hex::decode("46d326edb8bfc49b757ccd09930365595806bfc0")
+    let tag_hash: Vec<u8> = hex::decode("46d326edb8bfc49b757ccd09930365595806bfc0")
         .unwrap()
         .try_into()
         .unwrap();
-    assert_eq!(oid_to_array(tag_oid), tag_hash);
+    assert_eq!(oid_to_array(tag_oid).as_slice(), tag_hash.as_slice());
 
     repo.set_head("refs/heads/main").unwrap();
 
@@ -361,15 +361,15 @@ fn test_snapshot_swhid() {
             },
             Branch {
                 name: bs("refs/heads/main"),
-                target: BranchTarget::Revision(Some(commit_hash)),
+                target: BranchTarget::Revision(Some(commit_hash.to_vec())),
             },
             Branch {
                 name: bs("refs/tags/v1.0"),
-                target: BranchTarget::Release(Some(tag_hash)),
+                target: BranchTarget::Release(Some(tag_hash.to_vec())),
             },
             Branch {
                 name: bs("refs/heads/tree-branch"),
-                target: BranchTarget::Directory(Some(tree_hash)),
+                target: BranchTarget::Directory(Some(tree_hash.to_vec())),
             },
         ])
         .unwrap(),

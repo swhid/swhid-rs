@@ -6,13 +6,13 @@ fn bs(s: &'static str) -> Box<[u8]> {
 
 #[test]
 fn simple_rev_hash() {
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: [u8; 20] = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
 
     let rev = Revision {
-        directory: tree_hash,
+        directory: tree_hash.to_vec(),
         parents: Vec::new(),
         author: bs("Test User <test@example.com>"),
         author_timestamp: 1763027354,
@@ -54,13 +54,13 @@ fn simple_rev_hash() {
 
 #[test]
 fn negative_timezone() {
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: [u8; 20] = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
 
     let rev = Revision {
-        directory: tree_hash,
+        directory: tree_hash.to_vec(),
         parents: Vec::new(),
         author: bs("Test User <test@example.com>"),
         author_timestamp: 1763027354,

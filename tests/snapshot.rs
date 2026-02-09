@@ -9,11 +9,11 @@ fn simple_snp_hash() {
     let snp = Snapshot::new(vec![
         Branch::new(
             name("refs/heads/develop"),
-            BranchTarget::Revision(Some([2; 20])),
+            BranchTarget::Revision(Some(vec![2; 20])),
         ),
         Branch::new(
             name("refs/heads/main"),
-            BranchTarget::Revision(Some([1; 20])),
+            BranchTarget::Revision(Some(vec![1; 20])),
         ),
     ])
     .unwrap();
@@ -39,11 +39,11 @@ fn snp_order() {
     let snp = Snapshot::new(vec![
         Branch::new(
             name("refs/heads/main"),
-            BranchTarget::Revision(Some([1; 20])),
+            BranchTarget::Revision(Some(vec![1; 20])),
         ),
         Branch::new(
             name("refs/heads/develop"),
-            BranchTarget::Revision(Some([2; 20])),
+            BranchTarget::Revision(Some(vec![2; 20])),
         ),
     ])
     .unwrap();
@@ -82,11 +82,11 @@ fn snp_with_alias() {
     let snp = Snapshot::new(vec![
         Branch::new(
             name("refs/heads/main"),
-            BranchTarget::Revision(Some([1; 20])),
+            BranchTarget::Revision(Some(vec![1; 20])),
         ),
         Branch::new(
             name("refs/heads/develop"),
-            BranchTarget::Revision(Some([2; 20])),
+            BranchTarget::Revision(Some(vec![2; 20])),
         ),
         Branch::new(
             name("HEAD"),

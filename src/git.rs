@@ -61,7 +61,7 @@ fn directory_swhid_from_tree(
                 )));
             }
         };
-        entries.push(DirEntry::new(name, mode, id));
+        entries.push(DirEntry::new(name, mode, id.to_vec()));
     }
     let manifest =
         dir_manifest(entries).map_err(|e| io_error(format!("Directory manifest: {e}")))?;
@@ -183,8 +183,8 @@ pub fn revision_from_git(
         .collect();
 
     Ok(Revision {
-        directory,
-        parents,
+        directory: directory.to_vec(),
+        parents: parents.into_iter().map(|p| p.to_vec()).collect(),
         author,
         author_timestamp,
         author_timestamp_offset,
@@ -218,17 +218,17 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
     let target_oid = target.id();
     let object = match target.kind() {
         Some(GitObjectType::Commit) => {
-            let d = revision_swhid(repo, &target_oid)?.digest_bytes();
+            let s = revision_swhid(repo, &target_oid)?;
             let mut a = [0u8; 20];
-            a.copy_from_slice(d);
+            a.copy_from_slice(s.digest_bytes());
             a
         }
         Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, target_oid)?,
         Some(GitObjectType::Blob) => content_swhid_from_blob(repo, target_oid)?,
         Some(GitObjectType::Tag) => {
-            let d = release_swhid(repo, &target_oid)?.digest_bytes();
+            let s = release_swhid(repo, &target_oid)?;
             let mut a = [0u8; 20];
-            a.copy_from_slice(d);
+            a.copy_from_slice(s.digest_bytes());
             a
         }
         _ => return Err(io_error("Unknown target type".to_string())),
@@ -254,7 +254,7 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
     };
 
     Ok(Release {
-        object,
+        object: object.to_vec(),
         object_type,
         name: tag.name_bytes().into(),
         author,
@@ -359,24 +359,20 @@ fn reference_to_branch(
                 }
                 Some(git2::ObjectType::Any) => panic!("git2 returned an object with type 'Any'"),
                 Some(git2::ObjectType::Commit) => {
-                    let d = revision_swhid(repo, &target_id)?.digest_bytes();
-                    let mut digest = [0u8; 20];
-                    digest.copy_from_slice(d);
-                    BranchTarget::Revision(Some(digest))
+                    let s = revision_swhid(repo, &target_id)?;
+                    BranchTarget::Revision(Some(s.digest_bytes().to_vec()))
                 }
                 Some(git2::ObjectType::Tree) => {
                     let digest = directory_swhid_from_tree(repo, target_id)?;
-                    BranchTarget::Directory(Some(digest))
+                    BranchTarget::Directory(Some(digest.to_vec()))
                 }
                 Some(git2::ObjectType::Blob) => {
                     let digest = content_swhid_from_blob(repo, target_id)?;
-                    BranchTarget::Content(Some(digest))
+                    BranchTarget::Content(Some(digest.to_vec()))
                 }
                 Some(git2::ObjectType::Tag) => {
-                    let d = release_swhid(repo, &target_id)?.digest_bytes();
-                    let mut digest = [0u8; 20];
-                    digest.copy_from_slice(d);
-                    BranchTarget::Release(Some(digest))
+                    let s = release_swhid(repo, &target_id)?;
+                    BranchTarget::Release(Some(s.digest_bytes().to_vec()))
                 }
             };
             target

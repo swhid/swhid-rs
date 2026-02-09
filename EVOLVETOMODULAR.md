@@ -56,3 +56,20 @@ Goal: introduce plugin types and implementations (HashFunction, DigestSerializer
 - **content, directory, revision, release, snapshot**: all use `Swhid::new_v1(...)` when producing v1 SWHIDs.
 - **git.rs**: v1 path copies `digest_bytes()` to `[u8; 20]` where needed (parents, release target, snapshot branch targets).
 - **core test**: `swhid_parse_invalid_version` now only rejects "0" and "3"; "2" is valid.
+
+### Batch 2.3: Content — config-based SWHID
+
+- **content.rs**: `swhid_with_config(&self, config: &HashConfig) -> Swhid` using `hash_swhid_object_generic("blob", ..., config.hash_function)` and `Swhid::new(..., config.version)`. `swhid()` calls `swhid_with_config(&HashConfig::v1())`.
+
+### Batch 2.4: Directory — Entry.id as Vec&lt;u8&gt;, config-based SWHID
+
+- **directory.rs**: `Entry.id` changed from `[u8; 20]` to `Vec<u8>`; `Entry::new(name, mode, id: impl Into<Vec<u8>>)`; `From<ManifestEntry>` uses `manifest.target` (Vec). Added `swhid_with_config(&self, config: &HashConfig)` (manifest + generic hash + `Swhid::new(..., config.version)`); `swhid()` delegates to v1 config.
+- **git.rs**: `DirEntry::new(name, mode, id.to_vec())` when building tree entries.
+
+### Batch 2.5: Revision, Release, Snapshot — Vec&lt;u8&gt; ids and config-based SWHID
+
+- **revision.rs**: `Revision.directory` and `Revision.parents` are `Vec<u8>` and `Vec<Vec<u8>>`. `swhid_with_config` (manifest, config hasher, `Swhid::new(..., config.version)`); `swhid()` = `swhid_with_config(&HashConfig::v1())`. `rev_manifest` already uses `HexSerializer.encode` for directory/parents.
+- **release.rs**: `Release.object` is `Vec<u8>`. Same pattern: `swhid_with_config`, `swhid()` delegates to v1 config.
+- **snapshot.rs**: `BranchTarget` variants use `Option<Vec<u8>>` instead of `Option<[u8; 20]>`; `target_id()` uses `id.as_deref().unwrap_or(b"")`. Added `swhid_with_config` and delegated `swhid()` to v1 config.
+- **git.rs**: `revision_from_git` uses `directory.to_vec()`, `parents.into_iter().map(|p| p.to_vec()).collect()`; `release_from_git` uses `object.to_vec()`; `reference_to_branch` uses `d.to_vec()` / `digest.to_vec()` for branch targets. Release object built from `revision_swhid`/`release_swhid`/etc. by binding the `Swhid` before calling `digest_bytes()` to avoid temporary-borrow errors.
+- **Tests**: revision, release, snapshot, git tests updated for `Vec<u8>` / `Option<Vec<u8>>` and explicit types / slice comparisons where needed; `cargo test --features git` passes.

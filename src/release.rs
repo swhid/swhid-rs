@@ -1,3 +1,5 @@
+use crate::config::HashConfig;
+use crate::hash::hash_swhid_object_generic;
 use crate::serialization::{DigestSerializer, HexSerializer};
 use crate::utils::HeaderWriter;
 use crate::{Bytestring, Swhid};
@@ -12,7 +14,7 @@ pub enum ReleaseTargetType {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Release {
-    pub object: [u8; 20],
+    pub object: Vec<u8>,
     pub object_type: ReleaseTargetType,
     pub name: Bytestring,
     pub author: Option<Bytestring>,
@@ -23,15 +25,22 @@ pub struct Release {
 }
 
 impl Release {
-    /// Compute a SWHID v1.2 revision identifier from a Git commit
-    ///
-    /// This implements the SWHID v1.2 revision hashing algorithm for Git commits,
-    /// creating a `swh:1:rev:<digest>` identifier according to the specification.
-    pub fn swhid(&self) -> Swhid {
+    /// Compute the SWHID release identifier using the given config.
+    pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
         let manifest = rel_manifest(self);
-        let digest = crate::hash::hash_swhid_object("tag", &manifest);
+        let digest = hash_swhid_object_generic(
+            "tag",
+            &manifest,
+            config.hash_function.as_ref(),
+        );
+        Swhid::new(crate::ObjectType::Release, digest, config.version)
+    }
 
-        Swhid::new_v1(crate::ObjectType::Release, digest)
+    /// Compute the SWHID v1 release identifier (SHA-1, hex).
+    ///
+    /// Equivalent to `swhid_with_config(&HashConfig::v1())`.
+    pub fn swhid(&self) -> Swhid {
+        self.swhid_with_config(&HashConfig::v1())
     }
 }
 

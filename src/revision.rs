@@ -1,11 +1,13 @@
+use crate::config::HashConfig;
+use crate::hash::hash_swhid_object_generic;
 use crate::serialization::{DigestSerializer, HexSerializer};
 use crate::utils::HeaderWriter;
 use crate::{Bytestring, Swhid};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Revision {
-    pub directory: [u8; 20],
-    pub parents: Vec<[u8; 20]>,
+    pub directory: Vec<u8>,
+    pub parents: Vec<Vec<u8>>,
     pub author: Bytestring,
     pub author_timestamp: i64,
     pub author_timestamp_offset: Bytestring,
@@ -17,15 +19,22 @@ pub struct Revision {
 }
 
 impl Revision {
-    /// Compute a SWHID v1.2 revision identifier from a Git commit
-    ///
-    /// This implements the SWHID v1.2 revision hashing algorithm for Git commits,
-    /// creating a `swh:1:rev:<digest>` identifier according to the specification.
-    pub fn swhid(&self) -> Swhid {
+    /// Compute the SWHID revision identifier using the given config.
+    pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
         let manifest = rev_manifest(self);
-        let digest = crate::hash::hash_swhid_object("commit", &manifest);
+        let digest = hash_swhid_object_generic(
+            "commit",
+            &manifest,
+            config.hash_function.as_ref(),
+        );
+        Swhid::new(crate::ObjectType::Revision, digest, config.version)
+    }
 
-        Swhid::new_v1(crate::ObjectType::Revision, digest)
+    /// Compute the SWHID v1 revision identifier (SHA-1, hex).
+    ///
+    /// Equivalent to `swhid_with_config(&HashConfig::v1())`.
+    pub fn swhid(&self) -> Swhid {
+        self.swhid_with_config(&HashConfig::v1())
     }
 }
 

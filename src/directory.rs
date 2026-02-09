@@ -4,9 +4,10 @@ use std::path::Path;
 
 use std::path::PathBuf;
 
+use crate::config::HashConfig;
 use crate::core::{ObjectType, Swhid};
 use crate::error::DirectoryError;
-use crate::hash::{hash_content, hash_swhid_object};
+use crate::hash::{hash_content, hash_swhid_object, hash_swhid_object_generic};
 use crate::permissions::{
     resolve_file_permissions, EntryPerms, PermissionPolicy, PermissionsSource,
     PermissionsSourceKind,
@@ -58,13 +59,17 @@ pub struct Entry {
     name: Box<[u8]>,
     /// SWHID v1.2 tree mode (compatible with Git tree mode)
     mode: u32,
-    /// SWHID object id
-    id: [u8; 20],
+    /// SWHID object id (20 bytes for v1, 32 for v2)
+    id: Vec<u8>,
 }
 
 impl Entry {
-    pub fn new(name: Box<[u8]>, mode: u32, id: [u8; 20]) -> Entry {
-        Self { name, mode, id }
+    pub fn new(name: Box<[u8]>, mode: u32, id: impl Into<Vec<u8>>) -> Entry {
+        Self {
+            name,
+            mode,
+            id: id.into(),
+        }
     }
 
     fn is_dir(&self) -> bool {
@@ -84,17 +89,10 @@ impl Entry {
 
 impl From<ManifestEntry> for Entry {
     fn from(manifest: ManifestEntry) -> Self {
-        // Convert Vec<u8> to [u8; 20] for v1 compatibility
-        let id_array: [u8; 20] = manifest.target.try_into().unwrap_or_else(|v: Vec<u8>| {
-            let mut arr = [0u8; 20];
-            let len = v.len().min(20);
-            arr[..len].copy_from_slice(&v[..len]);
-            arr
-        });
         Entry {
             name: manifest.name.into_boxed_slice(),
             mode: manifest.perms.to_swh_mode_u32(),
-            id: id_array,
+            id: manifest.target,
         }
     }
 }
@@ -263,7 +261,7 @@ fn read_dir(
             children.push(Entry {
                 name: name_bytes,
                 mode: 0o040000,
-                id,
+                id: id.to_vec(),
             });
         } else if ft.is_symlink() {
             // The content is the link target bytes
@@ -279,7 +277,7 @@ fn read_dir(
             children.push(Entry {
                 name: name_bytes,
                 mode: symlink_mode(),
-                id,
+                id: id.to_vec(),
             });
         } else if ft.is_file() {
             let bytes = fs::read(entry.path()).map_err(|e| {
@@ -299,7 +297,7 @@ fn read_dir(
             children.push(Entry {
                 name: name_bytes,
                 mode,
-                id,
+                id: id.to_vec(),
             });
         } else {
             // ignore special files
@@ -341,16 +339,22 @@ impl Directory {
         &self.entries
     }
 
-    /// Compute the SWHID v1.2 directory identifier for this directory.
-    ///
-    /// This implements the SWHID v1.2 directory hashing algorithm, which
-    /// is compatible with Git's tree format for directory objects.
-    pub fn swhid(&self) -> Result<Swhid, crate::error::SwhidError> {
+    /// Compute the SWHID directory identifier using the given config.
+    pub fn swhid_with_config(&self, config: &HashConfig) -> Result<Swhid, crate::error::SwhidError> {
         let manifest = dir_manifest_unchecked(&self.entries);
-        Ok(Swhid::new_v1(
-            ObjectType::Directory,
-            hash_swhid_object("tree", &manifest),
-        ))
+        let digest = hash_swhid_object_generic(
+            "tree",
+            &manifest,
+            config.hash_function.as_ref(),
+        );
+        Ok(Swhid::new(ObjectType::Directory, digest, config.version))
+    }
+
+    /// Compute the SWHID v1 directory identifier (SHA-1, hex).
+    ///
+    /// Equivalent to `swhid_with_config(&HashConfig::v1())`.
+    pub fn swhid(&self) -> Result<Swhid, crate::error::SwhidError> {
+        self.swhid_with_config(&HashConfig::v1())
     }
 }
 

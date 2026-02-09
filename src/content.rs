@@ -1,5 +1,6 @@
+use crate::config::HashConfig;
 use crate::core::{ObjectType, Swhid};
-use crate::hash::hash_content;
+use crate::hash::hash_swhid_object_generic;
 
 /// SWHID v1.2 content object for computing content SWHIDs.
 ///
@@ -32,12 +33,17 @@ impl<B: AsRef<[u8]>> Content<B> {
         self.bytes.as_ref().is_empty()
     }
 
-    /// Compute the SWHID v1.2 content identifier for this content.
+    /// Compute the SWHID content identifier using the given config (hash + version).
+    pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
+        let digest =
+            hash_swhid_object_generic("blob", self.bytes.as_ref(), config.hash_function.as_ref());
+        Swhid::new(ObjectType::Content, digest, config.version)
+    }
+
+    /// Compute the SWHID v1 content identifier (SHA-1, hex).
     ///
-    /// This implements the SWHID v1.2 content hashing algorithm, which
-    /// is compatible with Git's blob format for content objects.
+    /// Equivalent to `swhid_with_config(&HashConfig::v1())`.
     pub fn swhid(&self) -> Swhid {
-        let digest = hash_content(self.bytes.as_ref());
-        Swhid::new_v1(ObjectType::Content, digest)
+        self.swhid_with_config(&HashConfig::v1())
     }
 }
