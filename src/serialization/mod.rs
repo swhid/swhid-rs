@@ -22,7 +22,7 @@ impl DigestSerializer for HexSerializer {
     }
 
     fn decode(&self, s: &str) -> Result<Vec<u8>, SwhidError> {
-        if s.len() != 40 || !s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        if s.len() % 2 != 0 || !s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
             return Err(SwhidError::InvalidDigest(s.to_owned()));
         }
         hex::decode(s).map_err(|_| SwhidError::InvalidDigest(s.to_owned()))

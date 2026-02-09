@@ -29,7 +29,7 @@ pub use permissions::{
 pub use qualifier::{ByteRange, LineRange, QualifiedSwhid};
 pub use release::{Release, ReleaseTargetType};
 pub use revision::Revision;
-pub use hash::{HashFunction, Sha1Hash};
+pub use hash::{HashFunction, Sha1Hash, Sha256Hash};
 pub use serialization::{DigestSerializer, HexSerializer};
 pub use snapshot::{Branch, BranchTarget, Snapshot};
 pub use types::{Encoding, HashAlgorithm, SwhidVersion};

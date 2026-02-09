@@ -1,4 +1,5 @@
 use sha1collisiondetection::{Digest, Sha1CD};
+use sha2::Sha256;
 
 /// Pluggable hash function for SWHID digest computation.
 pub trait HashFunction: Send + Sync {
@@ -25,6 +26,25 @@ impl HashFunction for Sha1Hash {
     }
     fn name(&self) -> &'static str {
         "sha1"
+    }
+}
+
+/// SHA-256 hash (SWHID v2).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Sha256Hash;
+
+impl HashFunction for Sha256Hash {
+    fn hash(&self, data: &[u8]) -> Vec<u8> {
+        use sha2::Digest;
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        hasher.finalize().to_vec()
+    }
+    fn digest_size(&self) -> usize {
+        32
+    }
+    fn name(&self) -> &'static str {
+        "sha256"
     }
 }
 

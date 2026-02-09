@@ -7,6 +7,8 @@
 pub enum SwhidVersion {
     /// SWHID v1: SHA-1 digest, 40 hex chars
     V1,
+    /// SWHID v2: configurable hash and encoding (e.g. SHA-256, hex/base64)
+    V2,
 }
 
 /// Hash algorithm for digest computation.
@@ -15,6 +17,8 @@ pub enum SwhidVersion {
 pub enum HashAlgorithm {
     /// SHA-1 (20 bytes)
     Sha1,
+    /// SHA-256 (32 bytes)
+    Sha256,
 }
 
 /// Encoding for digest string representation.

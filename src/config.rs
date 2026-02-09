@@ -1,7 +1,6 @@
 //! Hash and serialization config for the SWHID pipeline (pluggable v1/v2).
-//! Stage 1: v1 only (SHA1 + Hex).
 
-use crate::hash::{HashFunction, Sha1Hash};
+use crate::hash::{HashFunction, Sha1Hash, Sha256Hash};
 use crate::serialization::{DigestSerializer, HexSerializer};
 use crate::types::SwhidVersion;
 
@@ -23,6 +22,15 @@ impl HashConfig {
             hash_function: Box::new(Sha1Hash),
             serializer: Box::new(HexSerializer),
             version: SwhidVersion::V1,
+        }
+    }
+
+    /// V2 config: SHA-256 digest, lowercase hex encoding.
+    pub fn v2_sha256_hex() -> Self {
+        Self {
+            hash_function: Box::new(Sha256Hash),
+            serializer: Box::new(HexSerializer),
+            version: SwhidVersion::V2,
         }
     }
 }

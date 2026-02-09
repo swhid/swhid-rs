@@ -36,3 +36,16 @@ Goal: introduce plugin types and implementations (HashFunction, DigestSerializer
   - release: 11/11 passed
   - snapshot: category not in harness config (no payloads); rust binary runs.
 - **Checklist**: No new public API; `Swhid`, `hash_content`, `hash_swhid_object` unchanged; only SHA1 and Hex in use. Stage 1 done.
+
+---
+
+## Stage 2 — Extra plugins and single config-based pipeline
+
+### Batch 2.1: SHA256 plugin and v2 config
+
+- **Cargo.toml**: added `sha2 = "0.10"`.
+- **types.rs**: `SwhidVersion::V2`, `HashAlgorithm::Sha256`.
+- **hash.rs**: `Sha256Hash` implementing `HashFunction` (32-byte digest).
+- **serialization**: `HexSerializer::decode` accepts any even-length hex (40 for v1, 64 for v2).
+- **config.rs**: `HashConfig::v2_sha256_hex()` (SHA256 + Hex + V2).
+- **lib.rs**: re-export `Sha256Hash`.
