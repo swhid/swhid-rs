@@ -1,5 +1,33 @@
 use sha1collisiondetection::{Digest, Sha1CD};
 
+/// Pluggable hash function for SWHID digest computation.
+pub trait HashFunction: Send + Sync {
+    /// Compute digest of data.
+    fn hash(&self, data: &[u8]) -> Vec<u8>;
+    /// Digest length in bytes (e.g. 20 for SHA-1).
+    fn digest_size(&self) -> usize;
+    /// Algorithm name for diagnostics.
+    fn name(&self) -> &'static str;
+}
+
+/// SHA-1 hash (SWHID v1 default).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Sha1Hash;
+
+impl HashFunction for Sha1Hash {
+    fn hash(&self, data: &[u8]) -> Vec<u8> {
+        let mut hasher = Sha1CD::new();
+        hasher.update(data);
+        hasher.finalize().to_vec()
+    }
+    fn digest_size(&self) -> usize {
+        20
+    }
+    fn name(&self) -> &'static str {
+        "sha1"
+    }
+}
+
 /// Build SWHID v1.2 object header bytes: `<type> <len>\0`
 ///
 /// This implements the object header format specified in SWHID v1.2,
@@ -13,12 +41,25 @@ pub fn swhid_object_header(typ: &str, len: usize) -> Vec<u8> {
     v
 }
 
+/// Internal: hash SWHID object with any hasher. Public API remains hash_content / hash_swhid_object.
+pub(crate) fn hash_swhid_object_generic(
+    typ: &str,
+    payload: &[u8],
+    hasher: &dyn HashFunction,
+) -> Vec<u8> {
+    let header = swhid_object_header(typ, payload.len());
+    let mut input = header;
+    input.extend_from_slice(payload);
+    hasher.hash(&input)
+}
+
 /// Hash content data according to SWHID v1.2 specification.
 ///
 /// This computes the SHA-1 digest of content data using the SWHID v1.2
 /// object format, which is compatible with Git's blob format.
 pub fn hash_content(data: &[u8]) -> [u8; 20] {
-    hash_swhid_object("blob", data)
+    let v = hash_swhid_object_generic("blob", data, &Sha1Hash);
+    v.try_into().expect("SHA-1 digest is 20 bytes")
 }
 
 /// Hash arbitrary SWHID v1.2 object given its type and payload bytes.
@@ -26,11 +67,8 @@ pub fn hash_content(data: &[u8]) -> [u8; 20] {
 /// This implements the SWHID v1.2 object hashing algorithm for any
 /// object type (blob, tree, commit, tag, snapshot).
 pub fn hash_swhid_object(typ: &str, payload: &[u8]) -> [u8; 20] {
-    let header = swhid_object_header(typ, payload.len());
-    let mut hasher = Sha1CD::new();
-    hasher.update(&header);
-    hasher.update(payload);
-    hasher.finalize().into()
+    let v = hash_swhid_object_generic(typ, payload, &Sha1Hash);
+    v.try_into().expect("SHA-1 digest is 20 bytes")
 }
 
 #[cfg(test)]
