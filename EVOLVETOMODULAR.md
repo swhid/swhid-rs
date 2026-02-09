@@ -18,3 +18,10 @@ Goal: introduce plugin types and implementations (HashFunction, DigestSerializer
 - **Updated** `src/hash.rs`: Added `HashFunction` trait (`hash`, `digest_size`, `name`), `Sha1Hash` impl, and `hash_swhid_object_generic(typ, payload, hasher)`. `hash_content` and `hash_swhid_object` now call the generic path with `Sha1Hash`; public API and signatures unchanged.
 - **Added** `src/config.rs`: `HashConfig` with `hash_function`, `serializer`, `version`; `HashConfig::v1()` (SHA1 + Hex + V1).
 - **Updated** `src/lib.rs`: `pub mod config`, re-exports for `HashConfig`, `HashFunction`, `Sha1Hash`.
+
+### Batch 3: Wire core and manifests to Hex serializer
+
+- **Updated** `src/core.rs`: `digest_hex()`, `Display`, and `FromStr` use `HexSerializer` (trait `DigestSerializer` in scope). No direct `hex::encode` / `hex::decode`; digest encoding goes through the plugin.
+- **Updated** `src/revision.rs`: `rev_manifest` uses `HexSerializer.encode` for tree and parent digests.
+- **Updated** `src/release.rs`: `rel_manifest` uses `HexSerializer.encode` for object digest.
+- Behavior unchanged; all tests pass.

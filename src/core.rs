@@ -2,6 +2,7 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use crate::error::SwhidError;
+use crate::serialization::{DigestSerializer, HexSerializer};
 
 /// Known SWH object kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -66,7 +67,7 @@ impl Swhid {
     }
 
     pub fn digest_hex(&self) -> String {
-        hex::encode(self.digest)
+        HexSerializer.encode(&self.digest)
     }
 }
 
@@ -112,15 +113,9 @@ impl FromStr for Swhid {
             // too many parts
             return Err(SwhidError::InvalidFormat(s.to_owned()));
         }
-        if digest_hex.len() != 40
-            || !digest_hex
-                .bytes()
-                .all(|b| matches!(b, b'0'..=b'9'|b'a'..=b'f'))
-        {
-            return Err(SwhidError::InvalidDigest(digest_hex.to_owned()));
-        }
-        let mut raw = [0u8; 20];
-        hex::decode_to_slice(digest_hex, &mut raw)
+        let raw = HexSerializer.decode(digest_hex)?;
+        let raw: [u8; 20] = raw
+            .try_into()
             .map_err(|_| SwhidError::InvalidDigest(digest_hex.to_owned()))?;
         Ok(Swhid::new(object_type, raw))
     }

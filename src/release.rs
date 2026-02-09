@@ -1,3 +1,4 @@
+use crate::serialization::{DigestSerializer, HexSerializer};
 use crate::utils::HeaderWriter;
 use crate::{Bytestring, Swhid};
 
@@ -47,7 +48,7 @@ pub fn rel_manifest(rev: &Release) -> Vec<u8> {
     } = rev;
     let mut writer = HeaderWriter::default();
 
-    writer.push(b"object", hex::encode(object));
+    writer.push(b"object", HexSerializer.encode(object));
     writer.push(
         b"type",
         match object_type {

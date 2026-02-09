@@ -1,3 +1,4 @@
+use crate::serialization::{DigestSerializer, HexSerializer};
 use crate::utils::HeaderWriter;
 use crate::{Bytestring, Swhid};
 
@@ -42,10 +43,10 @@ pub fn rev_manifest(rev: &Revision) -> Vec<u8> {
         message,
     } = rev;
     let mut writer = HeaderWriter::default();
-    writer.push(b"tree", hex::encode(directory));
+    writer.push(b"tree", HexSerializer.encode(directory));
 
     for parent in parents {
-        writer.push(b"parent", hex::encode(parent));
+        writer.push(b"parent", HexSerializer.encode(parent));
     }
 
     writer.push_authorship(
