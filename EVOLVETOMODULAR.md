@@ -49,3 +49,10 @@ Goal: introduce plugin types and implementations (HashFunction, DigestSerializer
 - **serialization**: `HexSerializer::decode` accepts any even-length hex (40 for v1, 64 for v2).
 - **config.rs**: `HashConfig::v2_sha256_hex()` (SHA256 + Hex + V2).
 - **lib.rs**: re-export `Sha256Hash`.
+
+### Batch 2.2: Swhid evolution (variable digest + version)
+
+- **core.rs**: `Swhid` now has `digest: Vec<u8>` and `version: SwhidVersion`. Added `new(object_type, digest, version)`, `new_v1(object_type, [u8; 20])`, `digest_bytes() -> &[u8]`, `version()`. Display uses `version_str()` (1 or 2). FromStr accepts version "1" or "2" and variable-length hex digest.
+- **content, directory, revision, release, snapshot**: all use `Swhid::new_v1(...)` when producing v1 SWHIDs.
+- **git.rs**: v1 path copies `digest_bytes()` to `[u8; 20]` where needed (parents, release target, snapshot branch targets).
+- **core test**: `swhid_parse_invalid_version` now only rejects "0" and "3"; "2" is valid.

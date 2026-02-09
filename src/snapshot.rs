@@ -60,7 +60,7 @@ impl Snapshot {
     /// Compute the SWHID v1.2 snapshot identifier for this snapshot.
     pub fn swhid(&self) -> Swhid {
         let manifest = snp_manifest_unchecked(&self.branches);
-        Swhid::new(
+        Swhid::new_v1(
             ObjectType::Snapshot,
             hash_swhid_object("snapshot", &manifest),
         )

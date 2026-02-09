@@ -160,7 +160,14 @@ pub fn revision_from_git(
     let directory = directory_swhid_from_tree(repo, tree_oid)?;
     let parents: Vec<[u8; 20]> = commit
         .parents()
-        .map(|p| revision_swhid(repo, &p.id()).map(|s| *s.digest_bytes()))
+        .map(|p| {
+            revision_swhid(repo, &p.id()).map(|s| {
+                let d = s.digest_bytes();
+                let mut a = [0u8; 20];
+                a.copy_from_slice(d);
+                a
+            })
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     let (author, author_timestamp, author_timestamp_offset) = parse_signature(commit.author());
@@ -210,10 +217,20 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
         .map_err(|e| io_error(format!("Failed to get tag target: {e}")))?;
     let target_oid = target.id();
     let object = match target.kind() {
-        Some(GitObjectType::Commit) => *revision_swhid(repo, &target_oid)?.digest_bytes(),
+        Some(GitObjectType::Commit) => {
+            let d = revision_swhid(repo, &target_oid)?.digest_bytes();
+            let mut a = [0u8; 20];
+            a.copy_from_slice(d);
+            a
+        }
         Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, target_oid)?,
         Some(GitObjectType::Blob) => content_swhid_from_blob(repo, target_oid)?,
-        Some(GitObjectType::Tag) => *release_swhid(repo, &target_oid)?.digest_bytes(),
+        Some(GitObjectType::Tag) => {
+            let d = release_swhid(repo, &target_oid)?.digest_bytes();
+            let mut a = [0u8; 20];
+            a.copy_from_slice(d);
+            a
+        }
         _ => return Err(io_error("Unknown target type".to_string())),
     };
     let object_type = match target.kind() {
@@ -342,7 +359,9 @@ fn reference_to_branch(
                 }
                 Some(git2::ObjectType::Any) => panic!("git2 returned an object with type 'Any'"),
                 Some(git2::ObjectType::Commit) => {
-                    let digest = *revision_swhid(repo, &target_id)?.digest_bytes();
+                    let d = revision_swhid(repo, &target_id)?.digest_bytes();
+                    let mut digest = [0u8; 20];
+                    digest.copy_from_slice(d);
                     BranchTarget::Revision(Some(digest))
                 }
                 Some(git2::ObjectType::Tree) => {
@@ -354,7 +373,9 @@ fn reference_to_branch(
                     BranchTarget::Content(Some(digest))
                 }
                 Some(git2::ObjectType::Tag) => {
-                    let digest = *release_swhid(repo, &target_id)?.digest_bytes();
+                    let d = release_swhid(repo, &target_id)?.digest_bytes();
+                    let mut digest = [0u8; 20];
+                    digest.copy_from_slice(d);
                     BranchTarget::Release(Some(digest))
                 }
             };

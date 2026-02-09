@@ -31,7 +31,7 @@ impl Release {
         let manifest = rel_manifest(self);
         let digest = crate::hash::hash_swhid_object("tag", &manifest);
 
-        Swhid::new(crate::ObjectType::Release, digest)
+        Swhid::new_v1(crate::ObjectType::Release, digest)
     }
 }
 

@@ -38,6 +38,6 @@ impl<B: AsRef<[u8]>> Content<B> {
     /// is compatible with Git's blob format for content objects.
     pub fn swhid(&self) -> Swhid {
         let digest = hash_content(self.bytes.as_ref());
-        Swhid::new(ObjectType::Content, digest)
+        Swhid::new_v1(ObjectType::Content, digest)
     }
 }
