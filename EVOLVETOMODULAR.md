@@ -73,3 +73,19 @@ Goal: introduce plugin types and implementations (HashFunction, DigestSerializer
 - **snapshot.rs**: `BranchTarget` variants use `Option<Vec<u8>>` instead of `Option<[u8; 20]>`; `target_id()` uses `id.as_deref().unwrap_or(b"")`. Added `swhid_with_config` and delegated `swhid()` to v1 config.
 - **git.rs**: `revision_from_git` uses `directory.to_vec()`, `parents.into_iter().map(|p| p.to_vec()).collect()`; `release_from_git` uses `object.to_vec()`; `reference_to_branch` uses `d.to_vec()` / `digest.to_vec()` for branch targets. Release object built from `revision_swhid`/`release_swhid`/etc. by binding the `Swhid` before calling `digest_bytes()` to avoid temporary-borrow errors.
 - **Tests**: revision, release, snapshot, git tests updated for `Vec<u8>` / `Option<Vec<u8>>` and explicit types / slice comparisons where needed; `cargo test --features git` passes.
+
+### Batch 2.6–2.7: Git single path and SHA256 OID support
+
+- **git.rs**: Single config-based path. All Git SWHID computation goes through `HashConfig`.
+  - `content_swhid_from_blob(repo, blob_oid, config)` → `Vec<u8>` via `Content::from_bytes(...).swhid_with_config(config)`.
+  - `directory_swhid_from_tree(repo, tree_oid, config)` → `Vec<u8>` via `Directory::new(entries)?.swhid_with_config(config)`; entries use config-based content/dir helpers.
+  - `revision_from_git`, `release_from_git`, `snapshot_from_git`, `reference_to_branch` take `config: &HashConfig`; release object and branch targets use `digest_bytes().to_vec()` (variable-length; supports v2 32-byte digests).
+  - Public API: `revision_swhid_with_config`, `release_swhid_with_config`, `snapshot_swhid_with_config(repo, config)`; existing `revision_swhid`, `release_swhid`, `snapshot_swhid` delegate to v1 config.
+- **SHA256 OID support**: No fixed 20-byte arrays in git layer; digests and ids are `Vec<u8>`. Compatible with SHA256 Git repos (32-byte OIDs) when using v2 config; git2 accepts both 40- and 64-char hex OIDs.
+- **Tests**: git tests pass config `&HashConfig::v1()` to `*_from_git`; added v2 check in `test_revision_swhid` (revision_swhid_with_config with v2 yields `swh:2:rev:<64 hex>`).
+
+### Batch 2.8–2.9: CLI flags, tests, docs
+
+- **main.rs**: Git subcommand accepts `--version` (default `1`). Values: `1` → `HashConfig::v1()`, `2` → `HashConfig::v2_sha256_hex()`. Revision, release, and snapshot commands use `revision_swhid_with_config`, `release_swhid_with_config`, `snapshot_swhid_with_config` with the parsed config; output is v1 or v2 SWHID accordingly.
+- **Tests**: v2 revision test (see 2.6–2.7); `cargo test --features git` passes.
+- **Docs**: EVOLVETOMODULAR.md updated for 2.6–2.9.

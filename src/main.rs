@@ -2,8 +2,8 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 use swhid::{
-    Content, DirectoryBuildOptions, DiskDirectoryBuilder, PermissionPolicy, PermissionsSourceKind,
-    WalkOptions,
+    Content, DirectoryBuildOptions, DiskDirectoryBuilder, HashConfig, PermissionPolicy,
+    PermissionsSourceKind, WalkOptions,
 };
 use swhid::{QualifiedSwhid, Swhid};
 
@@ -78,6 +78,9 @@ enum Command {
     /// Git repository SWHID computation (requires --features git)
     #[cfg(feature = "git")]
     Git {
+        /// SWHID version: 1 (SHA-1, default) or 2 (SHA-256)
+        #[arg(long, value_name = "VERSION", default_value = "1")]
+        version: String,
         #[command(subcommand)]
         cmd: GitCommand,
     },
@@ -134,6 +137,19 @@ fn parse_permissions_policy(s: &str) -> Result<PermissionPolicy, Box<dyn std::er
         _ => Err(format!(
             "Invalid permissions policy: {}. Must be strict or best-effort",
             s
+        )
+        .into()),
+    }
+}
+
+#[cfg(feature = "git")]
+fn git_config_from_version(version: &str) -> Result<HashConfig, Box<dyn std::error::Error>> {
+    match version {
+        "1" => Ok(HashConfig::v1()),
+        "2" => Ok(HashConfig::v2_sha256_hex()),
+        _ => Err(format!(
+            "Invalid SWHID version: {}. Must be 1 or 2",
+            version
         )
         .into()),
     }
@@ -256,39 +272,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         #[cfg(feature = "git")]
-        Command::Git { cmd } => match cmd {
-            GitCommand::Revision { repo, commit } => {
-                let repo = git::open_repo(&repo)?;
-                let commit_oid = if let Some(commit_str) = commit {
-                    git2::Oid::from_str(&commit_str)
-                        .map_err(|e| format!("Invalid commit hash: {e}"))?
-                } else {
-                    git::get_head_commit(&repo)?
-                };
-                let swhid = git::revision_swhid(&repo, &commit_oid)?;
-                println!("{swhid}");
-            }
-            GitCommand::Release { repo, tag } => {
-                let repo = git::open_repo(&repo)?;
-                let tag_oid = repo
-                    .refname_to_id(&format!("refs/tags/{tag}"))
-                    .map_err(|e| format!("Tag not found: {e}"))?;
-                let swhid = git::release_swhid(&repo, &tag_oid)?;
-                println!("{swhid}");
-            }
-            GitCommand::Snapshot { repo } => {
-                let repo = git::open_repo(&repo)?;
-                let swhid = git::snapshot_swhid(&repo)?;
-                println!("{swhid}");
-            }
-            GitCommand::Tags { repo } => {
-                let repo = git::open_repo(&repo)?;
-                let tags = git::get_tags(&repo)?;
-                for tag_oid in tags {
-                    println!("{tag_oid}");
+        Command::Git { version, cmd } => {
+            let config = git_config_from_version(&version)?;
+            match cmd {
+                GitCommand::Revision { repo, commit } => {
+                    let repo = git::open_repo(&repo)?;
+                    let commit_oid = if let Some(commit_str) = commit {
+                        git2::Oid::from_str(&commit_str)
+                            .map_err(|e| format!("Invalid commit hash: {e}"))?
+                    } else {
+                        git::get_head_commit(&repo)?
+                    };
+                    let swhid = git::revision_swhid_with_config(&repo, &commit_oid, &config)?;
+                    println!("{swhid}");
+                }
+                GitCommand::Release { repo, tag } => {
+                    let repo = git::open_repo(&repo)?;
+                    let tag_oid = repo
+                        .refname_to_id(&format!("refs/tags/{tag}"))
+                        .map_err(|e| format!("Tag not found: {e}"))?;
+                    let swhid = git::release_swhid_with_config(&repo, &tag_oid, &config)?;
+                    println!("{swhid}");
+                }
+                GitCommand::Snapshot { repo } => {
+                    let repo = git::open_repo(&repo)?;
+                    let swhid = git::snapshot_swhid_with_config(&repo, &config)?;
+                    println!("{swhid}");
+                }
+                GitCommand::Tags { repo } => {
+                    let repo = git::open_repo(&repo)?;
+                    let tags = git::get_tags(&repo)?;
+                    for tag_oid in tags {
+                        println!("{tag_oid}");
+                    }
                 }
             }
-        },
+        }
     }
     Ok(())
 }

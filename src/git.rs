@@ -10,10 +10,14 @@
 //! SWHID and parent revision SWHIDs; release uses target SWHID; snapshot
 //! branches use revision/release/directory/content SWHIDs; directory from
 //! tree uses content/directory SWHIDs for entries.
+//!
+//! All computation goes through a single config-based path; v1 (SHA-1) is the
+//! default. Use `*_swhid_with_config` for v2 (e.g. SHA-256) or custom config.
 
-use crate::directory::{dir_manifest, Entry as DirEntry};
+use crate::config::HashConfig;
+use crate::content::Content;
+use crate::directory::{Directory, Entry as DirEntry};
 use crate::error::SwhidError;
-use crate::hash::{hash_content, hash_swhid_object};
 use crate::Swhid;
 use std::path::Path;
 
@@ -28,22 +32,27 @@ fn io_error(msg: String) -> SwhidError {
     SwhidError::Io(std::io::Error::other(msg))
 }
 
-/// Content SWHID digest (20 bytes) from a Git blob OID.
+/// Content SWHID digest bytes from a Git blob OID (length depends on config).
 /// Per spec 5.2: intrinsic identifier is hash of blob object format.
-fn content_swhid_from_blob(repo: &Repository, blob_oid: git2::Oid) -> Result<[u8; 20], SwhidError> {
+fn content_swhid_from_blob(
+    repo: &Repository,
+    blob_oid: git2::Oid,
+    config: &HashConfig,
+) -> Result<Vec<u8>, SwhidError> {
     let blob = repo
         .find_blob(blob_oid)
         .map_err(|e| io_error(format!("Failed to find blob {blob_oid}: {e}")))?;
     let bytes = blob.content();
-    Ok(hash_content(bytes))
+    Ok(Content::from_bytes(bytes).swhid_with_config(config).digest_bytes().to_vec())
 }
 
-/// Directory SWHID digest (20 bytes) from a Git tree OID.
+/// Directory SWHID digest bytes from a Git tree OID (length depends on config).
 /// Per spec 5.3: compute SWHID of each entry (content or directory), then manifest.
 fn directory_swhid_from_tree(
     repo: &Repository,
     tree_oid: git2::Oid,
-) -> Result<[u8; 20], SwhidError> {
+    config: &HashConfig,
+) -> Result<Vec<u8>, SwhidError> {
     let tree = repo
         .find_tree(tree_oid)
         .map_err(|e| io_error(format!("Failed to find tree {tree_oid}: {e}")))?;
@@ -52,8 +61,8 @@ fn directory_swhid_from_tree(
         let name = entry.name_bytes().to_owned().into_boxed_slice();
         let mode = entry.filemode() as u32;
         let id = match entry.kind() {
-            Some(GitObjectType::Blob) => content_swhid_from_blob(repo, entry.id())?,
-            Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, entry.id())?,
+            Some(GitObjectType::Blob) => content_swhid_from_blob(repo, entry.id(), config)?,
+            Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, entry.id(), config)?,
             _ => {
                 return Err(io_error(format!(
                     "Tree entry {:?} has unsupported type",
@@ -61,11 +70,10 @@ fn directory_swhid_from_tree(
                 )));
             }
         };
-        entries.push(DirEntry::new(name, mode, id.to_vec()));
+        entries.push(DirEntry::new(name, mode, id));
     }
-    let manifest =
-        dir_manifest(entries).map_err(|e| io_error(format!("Directory manifest: {e}")))?;
-    Ok(hash_swhid_object("tree", &manifest))
+    let dir = Directory::new(entries).map_err(|e| io_error(format!("Directory: {e}")))?;
+    Ok(dir.swhid_with_config(config).map_err(|e| io_error(e.to_string()))?.digest_bytes().to_vec())
 }
 
 fn parse_signature(sig: Signature) -> (Bytestring, i64, Bytestring) {
@@ -135,18 +143,28 @@ fn parse_header(mut manifest: &[u8]) -> Result<Vec<(&[u8], Bytestring)>, SwhidEr
     Ok(headers)
 }
 
-/// Compute a SWHID v1.2 revision identifier from a Git commit
+/// Compute a SWHID revision identifier from a Git commit using the given config.
+pub fn revision_swhid_with_config(
+    repo: &Repository,
+    commit_oid: &git2::Oid,
+    config: &HashConfig,
+) -> Result<Swhid, SwhidError> {
+    revision_from_git(repo, commit_oid, config).map(|rev| rev.swhid_with_config(config))
+}
+
+/// Compute a SWHID v1.2 revision identifier from a Git commit (v1 config).
 ///
 /// This implements the SWHID v1.2 revision hashing algorithm for Git commits,
 /// creating a `swh:1:rev:<digest>` identifier according to the specification.
 pub fn revision_swhid(repo: &Repository, commit_oid: &git2::Oid) -> Result<Swhid, SwhidError> {
-    revision_from_git(repo, commit_oid).map(|rev| rev.swhid())
+    revision_swhid_with_config(repo, commit_oid, &HashConfig::v1())
 }
 
 #[doc(hidden)]
 pub fn revision_from_git(
     repo: &Repository,
     commit_oid: &git2::Oid,
+    config: &HashConfig,
 ) -> Result<Revision, SwhidError> {
     let commit = repo
         .find_commit(*commit_oid)
@@ -157,16 +175,11 @@ pub fn revision_from_git(
         .map_err(|e| io_error(format!("Failed to get commit tree: {e}")))?;
 
     let tree_oid = tree.id();
-    let directory = directory_swhid_from_tree(repo, tree_oid)?;
-    let parents: Vec<[u8; 20]> = commit
+    let directory = directory_swhid_from_tree(repo, tree_oid, config)?;
+    let parents: Vec<Vec<u8>> = commit
         .parents()
         .map(|p| {
-            revision_swhid(repo, &p.id()).map(|s| {
-                let d = s.digest_bytes();
-                let mut a = [0u8; 20];
-                a.copy_from_slice(d);
-                a
-            })
+            revision_swhid_with_config(repo, &p.id(), config).map(|s| s.digest_bytes().to_vec())
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -183,8 +196,8 @@ pub fn revision_from_git(
         .collect();
 
     Ok(Revision {
-        directory: directory.to_vec(),
-        parents: parents.into_iter().map(|p| p.to_vec()).collect(),
+        directory,
+        parents,
         author,
         author_timestamp,
         author_timestamp_offset,
@@ -196,16 +209,29 @@ pub fn revision_from_git(
     })
 }
 
-/// Compute a SWHID v1.2 release identifier from a Git tag
+/// Compute a SWHID release identifier from a Git tag using the given config.
+pub fn release_swhid_with_config(
+    repo: &Repository,
+    tag_oid: &git2::Oid,
+    config: &HashConfig,
+) -> Result<Swhid, SwhidError> {
+    release_from_git(repo, tag_oid, config).map(|rel| rel.swhid_with_config(config))
+}
+
+/// Compute a SWHID v1.2 release identifier from a Git tag (v1 config).
 ///
 /// This implements the SWHID v1.2 release hashing algorithm for Git tags,
 /// creating a `swh:1:rel:<digest>` identifier according to the specification.
 pub fn release_swhid(repo: &Repository, tag_oid: &git2::Oid) -> Result<Swhid, SwhidError> {
-    release_from_git(repo, tag_oid).map(|rel| rel.swhid())
+    release_swhid_with_config(repo, tag_oid, &HashConfig::v1())
 }
 
 #[doc(hidden)]
-pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Release, SwhidError> {
+pub fn release_from_git(
+    repo: &Repository,
+    tag_oid: &git2::Oid,
+    config: &HashConfig,
+) -> Result<Release, SwhidError> {
     use crate::release::ReleaseTargetType;
 
     let tag = repo
@@ -216,20 +242,14 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
         .target()
         .map_err(|e| io_error(format!("Failed to get tag target: {e}")))?;
     let target_oid = target.id();
-    let object = match target.kind() {
+    let object: Vec<u8> = match target.kind() {
         Some(GitObjectType::Commit) => {
-            let s = revision_swhid(repo, &target_oid)?;
-            let mut a = [0u8; 20];
-            a.copy_from_slice(s.digest_bytes());
-            a
+            revision_swhid_with_config(repo, &target_oid, config)?.digest_bytes().to_vec()
         }
-        Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, target_oid)?,
-        Some(GitObjectType::Blob) => content_swhid_from_blob(repo, target_oid)?,
+        Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, target_oid, config)?,
+        Some(GitObjectType::Blob) => content_swhid_from_blob(repo, target_oid, config)?,
         Some(GitObjectType::Tag) => {
-            let s = release_swhid(repo, &target_oid)?;
-            let mut a = [0u8; 20];
-            a.copy_from_slice(s.digest_bytes());
-            a
+            release_swhid_with_config(repo, &target_oid, config)?.digest_bytes().to_vec()
         }
         _ => return Err(io_error("Unknown target type".to_string())),
     };
@@ -254,7 +274,7 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
     };
 
     Ok(Release {
-        object: object.to_vec(),
+        object,
         object_type,
         name: tag.name_bytes().into(),
         author,
@@ -265,23 +285,34 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
     })
 }
 
-/// Compute a SWHID v1.2 snapshot identifier from a Git repository
+/// Compute a SWHID snapshot identifier from a Git repository using the given config.
+pub fn snapshot_swhid_with_config(
+    repo: &Repository,
+    config: &HashConfig,
+) -> Result<Swhid, SwhidError> {
+    snapshot_from_git(repo, config).map(|snp| snp.swhid_with_config(config))
+}
+
+/// Compute a SWHID v1.2 snapshot identifier from a Git repository (v1 config).
 ///
 /// This implements the SWHID v1.2 snapshot hashing algorithm for Git repositories,
 /// creating a `swh:1:snp:<digest>` identifier according to the specification.
 pub fn snapshot_swhid(repo: &Repository) -> Result<Swhid, SwhidError> {
-    snapshot_from_git(repo).map(|snp| snp.swhid())
+    snapshot_swhid_with_config(repo, &HashConfig::v1())
 }
 
 #[doc(hidden)]
-pub fn snapshot_from_git(repo: &Repository) -> Result<Snapshot, SwhidError> {
+pub fn snapshot_from_git(
+    repo: &Repository,
+    config: &HashConfig,
+) -> Result<Snapshot, SwhidError> {
     let references = repo
         .references()
         .map_err(|e| io_error(format!("Failed to list references: {e}")))?;
 
     let mut branches: Vec<_> = references
         .flat_map(|reference| match reference {
-            Ok(reference) => reference_to_branch(repo, reference).transpose(),
+            Ok(reference) => reference_to_branch(repo, reference, config).transpose(),
             Err(e) => Some(Err(io_error(format!("Failed to read reference: {e}")))),
         })
         .collect::<Result<_, _>>()?;
@@ -289,7 +320,7 @@ pub fn snapshot_from_git(repo: &Repository) -> Result<Snapshot, SwhidError> {
     let head = repo
         .head()
         .map_err(|e| io_error(format!("Failed to get HEAD: {e}")))?;
-    if let Some(head_branch) = reference_to_branch(repo, head)? {
+    if let Some(head_branch) = reference_to_branch(repo, head, config)? {
         let Branch { name, target: _ } = head_branch;
         branches.push(Branch {
             name: (*b"HEAD").into(),
@@ -303,6 +334,7 @@ pub fn snapshot_from_git(repo: &Repository) -> Result<Snapshot, SwhidError> {
 fn reference_to_branch(
     repo: &Repository,
     reference: git2::Reference<'_>,
+    config: &HashConfig,
 ) -> Result<Option<Branch>, SwhidError> {
     if !reference.is_branch() && !reference.is_tag() {
         return Ok(None);
@@ -359,19 +391,19 @@ fn reference_to_branch(
                 }
                 Some(git2::ObjectType::Any) => panic!("git2 returned an object with type 'Any'"),
                 Some(git2::ObjectType::Commit) => {
-                    let s = revision_swhid(repo, &target_id)?;
+                    let s = revision_swhid_with_config(repo, &target_id, config)?;
                     BranchTarget::Revision(Some(s.digest_bytes().to_vec()))
                 }
                 Some(git2::ObjectType::Tree) => {
-                    let digest = directory_swhid_from_tree(repo, target_id)?;
-                    BranchTarget::Directory(Some(digest.to_vec()))
+                    let digest = directory_swhid_from_tree(repo, target_id, config)?;
+                    BranchTarget::Directory(Some(digest))
                 }
                 Some(git2::ObjectType::Blob) => {
-                    let digest = content_swhid_from_blob(repo, target_id)?;
-                    BranchTarget::Content(Some(digest.to_vec()))
+                    let digest = content_swhid_from_blob(repo, target_id, config)?;
+                    BranchTarget::Content(Some(digest))
                 }
                 Some(git2::ObjectType::Tag) => {
-                    let s = release_swhid(repo, &target_id)?;
+                    let s = release_swhid_with_config(repo, &target_id, config)?;
                     BranchTarget::Release(Some(s.digest_bytes().to_vec()))
                 }
             };

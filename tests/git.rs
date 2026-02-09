@@ -7,6 +7,7 @@ use swhid::git::*;
 use swhid::release::{Release, ReleaseTargetType};
 use swhid::revision::Revision;
 use swhid::snapshot::{Branch, BranchTarget, Snapshot};
+use swhid::HashConfig;
 
 fn bs(s: &'static str) -> Box<[u8]> {
     s.as_bytes().into()
@@ -53,7 +54,7 @@ fn test_revision_swhid() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid).unwrap();
+    let rev = revision_from_git(&repo, &commit_oid, &HashConfig::v1()).unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -84,6 +85,14 @@ fn test_revision_swhid() {
         swhid.to_string(),
         "swh:1:rev:07cde6575fb633ef9b5ecbe730e6eb97475a2fd9"
     );
+
+    // v2 (SHA-256) produces swh:2:rev:<64 hex chars>
+    let config_v2 = HashConfig::v2_sha256_hex();
+    let swhid_v2 = revision_swhid_with_config(&repo, &commit_oid, &config_v2).unwrap();
+    let s = swhid_v2.to_string();
+    assert!(s.starts_with("swh:2:rev:"));
+    assert_eq!(s.len(), "swh:2:rev:".len() + 64);
+    assert!(s["swh:2:rev:".len()..].chars().all(|c| c.is_ascii_hexdigit()));
 }
 
 #[test]
@@ -126,7 +135,7 @@ fn test_revision_negative_timezone() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid).unwrap();
+    let rev = revision_from_git(&repo, &commit_oid, &HashConfig::v1()).unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -186,7 +195,7 @@ fn test_signed_revision_swhid() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid).unwrap();
+    let rev = revision_from_git(&repo, &commit_oid, &HashConfig::v1()).unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -253,9 +262,9 @@ fn test_release_swhid() {
         )
         .unwrap();
 
-    let rev = release_from_git(&repo, &tag_oid).unwrap();
+    let rel = release_from_git(&repo, &tag_oid, &HashConfig::v1()).unwrap();
     assert_eq!(
-        rev,
+        rel,
         Release {
             object: tree_hash.to_vec(),
             object_type: ReleaseTargetType::Directory,
@@ -351,7 +360,7 @@ fn test_snapshot_swhid() {
 
     repo.set_head("refs/heads/main").unwrap();
 
-    let snp = snapshot_from_git(&repo).unwrap();
+    let snp = snapshot_from_git(&repo, &HashConfig::v1()).unwrap();
     assert_eq!(
         snp,
         Snapshot::new(vec![
@@ -417,7 +426,7 @@ fn test_snapshot_swhid_with_dangling_branch() {
     std::fs::create_dir_all(ref_path.parent().unwrap()).unwrap();
     std::fs::write(&ref_path, "0000000000000000000000000000000000000000\n").unwrap();
 
-    let snp = snapshot_from_git(&repo).unwrap();
+    let snp = snapshot_from_git(&repo, &HashConfig::v1()).unwrap();
     let branches: Vec<_> = snp.branches().to_vec();
     assert!(
         branches
