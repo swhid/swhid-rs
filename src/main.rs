@@ -4,8 +4,7 @@ use std::path::PathBuf;
 use swhid::{
     Base32HexSerializer, Base32Serializer, Base64Serializer, Base64UrlSerializer, Content,
     DigestSerializer, DirectoryBuildOptions, DiskDirectoryBuilder, HashConfig, HashFunction,
-    HexSerializer, PermissionPolicy, PermissionsSourceKind, SwhidVersion, WalkOptions,
-    Z85Serializer,
+    PermissionPolicy, PermissionsSourceKind, SwhidVersion, WalkOptions, Z85Serializer,
 };
 use swhid::{QualifiedSwhid, Swhid};
 
