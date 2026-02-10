@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use swhid::{
     Content, DirectoryBuildOptions, DiskDirectoryBuilder, HashConfig, PermissionPolicy,
-    PermissionsSourceKind, WalkOptions,
+    PermissionsSourceKind, SwhidVersion, WalkOptions,
 };
 use swhid::{QualifiedSwhid, Swhid};
 
@@ -27,6 +27,9 @@ enum Command {
         /// Path to file (if omitted, read stdin)
         #[arg(short, long)]
         file: Option<PathBuf>,
+        /// SWHID version: 1 (SHA-1, default) or 2 (SHA-256)
+        #[arg(long, value_name = "VERSION", default_value = "1")]
+        version: String,
     },
     /// Compute a directory SWHID recursively
     Dir {
@@ -47,6 +50,9 @@ enum Command {
         /// Path to permission manifest file (required when source=manifest)
         #[arg(long, value_name = "PATH")]
         permissions_manifest: Option<PathBuf>,
+        /// SWHID version: 1 (SHA-1, default) or 2 (SHA-256)
+        #[arg(long, value_name = "VERSION", default_value = "1")]
+        version: String,
     },
     /// Parse/pretty-print a (qualified) SWHID
     Parse {
@@ -142,8 +148,7 @@ fn parse_permissions_policy(s: &str) -> Result<PermissionPolicy, Box<dyn std::er
     }
 }
 
-#[cfg(feature = "git")]
-fn git_config_from_version(version: &str) -> Result<HashConfig, Box<dyn std::error::Error>> {
+fn config_from_version(version: &str) -> Result<HashConfig, Box<dyn std::error::Error>> {
     match version {
         "1" => Ok(HashConfig::v1()),
         "2" => Ok(HashConfig::v2_sha256_hex()),
@@ -158,7 +163,8 @@ fn git_config_from_version(version: &str) -> Result<HashConfig, Box<dyn std::err
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.cmd {
-        Command::Content { file } => {
+        Command::Content { file, version } => {
+            let config = config_from_version(&version)?;
             let bytes = if let Some(p) = file {
                 std::fs::read(p)?
             } else {
@@ -167,7 +173,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 std::io::stdin().read_to_end(&mut buf)?;
                 buf
             };
-            let s = Content::from_bytes(bytes).swhid();
+            let s = Content::from_bytes(bytes).swhid_with_config(&config);
             println!("{s}");
         }
         Command::Dir {
@@ -177,7 +183,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             permissions_source,
             permissions_policy,
             permissions_manifest,
+            version,
         } => {
+            let config = config_from_version(&version)?;
             let perm_source = parse_permissions_source(&permissions_source)?;
             let perm_policy = parse_permissions_policy(&permissions_policy)?;
 
@@ -198,7 +206,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             let dir = DiskDirectoryBuilder::new(&path).with_build_options(build_opts);
-            let swhid = dir.swhid()?;
+            let swhid = dir.swhid_with_config(&config)?;
             println!("{swhid}");
         }
         Command::Parse { swhid } => {
@@ -230,9 +238,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             let expected: Swhid = swhid.parse()?;
+            // Use the same version as the expected SWHID
+            let config = match expected.version() {
+                SwhidVersion::V1 => HashConfig::v1(),
+                SwhidVersion::V2 => HashConfig::v2_sha256_hex(),
+            };
             let actual = if path.is_file() {
                 let bytes = std::fs::read(&path)?;
-                Content::from_bytes(bytes).swhid()
+                Content::from_bytes(bytes).swhid_with_config(&config)
             } else if path.is_dir() {
                 let build_opts = DirectoryBuildOptions {
                     permissions_source: perm_source,
@@ -244,7 +257,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     },
                 };
                 let dir = DiskDirectoryBuilder::new(&path).with_build_options(build_opts);
-                dir.swhid()?
+                dir.swhid_with_config(&config)?
             } else {
                 eprintln!(
                     "Error: {} is neither a file nor a directory",
@@ -273,7 +286,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         #[cfg(feature = "git")]
         Command::Git { version, cmd } => {
-            let config = git_config_from_version(&version)?;
+            let config = config_from_version(&version)?;
             match cmd {
                 GitCommand::Revision { repo, commit } => {
                     let repo = git::open_repo(&repo)?;
