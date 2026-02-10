@@ -2,8 +2,8 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 use swhid::{
-    Content, DirectoryBuildOptions, DiskDirectoryBuilder, HashConfig, PermissionPolicy,
-    PermissionsSourceKind, SwhidVersion, WalkOptions,
+    Content, DigestSerializer, DirectoryBuildOptions, DiskDirectoryBuilder, HashConfig,
+    HashFunction, PermissionPolicy, PermissionsSourceKind, SwhidVersion, WalkOptions,
 };
 use swhid::{QualifiedSwhid, Swhid};
 
@@ -30,6 +30,12 @@ enum Command {
         /// SWHID version: 1 (SHA-1, default) or 2 (SHA-256)
         #[arg(long, value_name = "VERSION", default_value = "1")]
         version: String,
+        /// Hash algorithm: sha1 or sha256 (overrides --version)
+        #[arg(long, value_name = "HASH")]
+        hash: Option<String>,
+        /// Format: hex (default, only option currently)
+        #[arg(long, value_name = "FORMAT", default_value = "hex")]
+        format: String,
     },
     /// Compute a directory SWHID recursively
     Dir {
@@ -53,6 +59,12 @@ enum Command {
         /// SWHID version: 1 (SHA-1, default) or 2 (SHA-256)
         #[arg(long, value_name = "VERSION", default_value = "1")]
         version: String,
+        /// Hash algorithm: sha1 or sha256 (overrides --version)
+        #[arg(long, value_name = "HASH")]
+        hash: Option<String>,
+        /// Format: hex (default, only option currently)
+        #[arg(long, value_name = "FORMAT", default_value = "hex")]
+        format: String,
     },
     /// Parse/pretty-print a (qualified) SWHID
     Parse {
@@ -87,6 +99,12 @@ enum Command {
         /// SWHID version: 1 (SHA-1, default) or 2 (SHA-256)
         #[arg(long, value_name = "VERSION", default_value = "1")]
         version: String,
+        /// Hash algorithm: sha1 or sha256 (overrides --version)
+        #[arg(long, value_name = "HASH")]
+        hash: Option<String>,
+        /// Format: hex (default, only option currently)
+        #[arg(long, value_name = "FORMAT", default_value = "hex")]
+        format: String,
         #[command(subcommand)]
         cmd: GitCommand,
     },
@@ -148,23 +166,84 @@ fn parse_permissions_policy(s: &str) -> Result<PermissionPolicy, Box<dyn std::er
     }
 }
 
-fn config_from_version(version: &str) -> Result<HashConfig, Box<dyn std::error::Error>> {
-    match version {
-        "1" => Ok(HashConfig::v1()),
-        "2" => Ok(HashConfig::v2_sha256_hex()),
-        _ => Err(format!(
-            "Invalid SWHID version: {}. Must be 1 or 2",
-            version
-        )
-        .into()),
-    }
+fn config_from_hash_and_format(
+    hash: Option<&str>,
+    format: &str,
+    version: &str,
+) -> Result<HashConfig, Box<dyn std::error::Error>> {
+    use swhid::{HashAlgorithm, Sha1Hash, Sha256Hash};
+    use swhid::HexSerializer;
+    use swhid::SwhidVersion;
+
+    // Determine hash algorithm
+    let hash_algorithm = if let Some(h) = hash {
+        match h.to_lowercase().as_str() {
+            "sha1" | "sha-1" => HashAlgorithm::Sha1,
+            "sha256" | "sha-256" => HashAlgorithm::Sha256,
+            _ => {
+                return Err(format!(
+                    "Invalid hash algorithm: {}. Must be sha1 or sha256",
+                    h
+                )
+                .into());
+            }
+        }
+    } else {
+        // Use version to determine hash
+        match version {
+            "1" => HashAlgorithm::Sha1,
+            "2" => HashAlgorithm::Sha256,
+            _ => {
+                return Err(format!(
+                    "Invalid SWHID version: {}. Must be 1 or 2",
+                    version
+                )
+                .into());
+            }
+        }
+    };
+
+    // Determine serializer (currently only hex is supported)
+    let serializer: Box<dyn DigestSerializer> = match format.to_lowercase().as_str() {
+        "hex" => Box::new(HexSerializer),
+        _ => {
+            return Err(format!(
+                "Invalid format: {}. Currently only 'hex' is supported",
+                format
+            )
+            .into());
+        }
+    };
+
+    // Determine version based on hash algorithm
+    let swhid_version = match hash_algorithm {
+        HashAlgorithm::Sha1 => SwhidVersion::V1,
+        HashAlgorithm::Sha256 => SwhidVersion::V2,
+    };
+
+    // Build config
+    let hash_function: Box<dyn HashFunction> = match hash_algorithm {
+        HashAlgorithm::Sha1 => Box::new(Sha1Hash),
+        HashAlgorithm::Sha256 => Box::new(Sha256Hash),
+    };
+
+    Ok(HashConfig {
+        hash_function,
+        serializer,
+        version: swhid_version,
+    })
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     match cli.cmd {
-        Command::Content { file, version } => {
-            let config = config_from_version(&version)?;
+        Command::Content {
+            file,
+            version,
+            hash,
+            format,
+        } => {
+            let config = config_from_hash_and_format(hash.as_deref(), &format, &version)?;
             let bytes = if let Some(p) = file {
                 std::fs::read(p)?
             } else {
@@ -184,8 +263,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             permissions_policy,
             permissions_manifest,
             version,
+            hash,
+            format,
         } => {
-            let config = config_from_version(&version)?;
+            let config = config_from_hash_and_format(hash.as_deref(), &format, &version)?;
             let perm_source = parse_permissions_source(&permissions_source)?;
             let perm_policy = parse_permissions_policy(&permissions_policy)?;
 
@@ -285,8 +366,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         #[cfg(feature = "git")]
-        Command::Git { version, cmd } => {
-            let config = config_from_version(&version)?;
+        Command::Git {
+            version,
+            hash,
+            format,
+            cmd,
+        } => {
+            let config = config_from_hash_and_format(hash.as_deref(), &format, &version)?;
             match cmd {
                 GitCommand::Revision { repo, commit } => {
                     let repo = git::open_repo(&repo)?;
