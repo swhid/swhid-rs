@@ -30,7 +30,10 @@ pub use qualifier::{ByteRange, LineRange, QualifiedSwhid};
 pub use release::{Release, ReleaseTargetType};
 pub use revision::Revision;
 pub use hash::{HashFunction, Sha1Hash, Sha256Hash};
-pub use serialization::{DigestSerializer, HexSerializer};
+pub use serialization::{
+    Base32HexSerializer, Base32Serializer, Base64Serializer, Base64UrlSerializer,
+    DigestSerializer, HexSerializer, Z85Serializer,
+};
 pub use snapshot::{Branch, BranchTarget, Snapshot};
 pub use types::{Encoding, HashAlgorithm, SwhidVersion};
 

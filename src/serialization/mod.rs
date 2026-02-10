@@ -1,5 +1,8 @@
 //! Digest encoding/decoding for SWHID (pluggable serialization).
-//! Stage 1: Hex only. More encodings added in Stage 2.
+
+mod base32;
+mod base64;
+mod z85;
 
 use crate::error::SwhidError;
 
@@ -28,3 +31,7 @@ impl DigestSerializer for HexSerializer {
         hex::decode(s).map_err(|_| SwhidError::InvalidDigest(s.to_owned()))
     }
 }
+
+pub use base32::{Base32HexSerializer, Base32Serializer};
+pub use base64::{Base64Serializer, Base64UrlSerializer};
+pub use z85::Z85Serializer;

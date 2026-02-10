@@ -1,7 +1,10 @@
 //! Hash and serialization config for the SWHID pipeline (pluggable v1/v2).
 
 use crate::hash::{HashFunction, Sha1Hash, Sha256Hash};
-use crate::serialization::{DigestSerializer, HexSerializer};
+use crate::serialization::{
+    Base32HexSerializer, Base32Serializer, Base64Serializer, Base64UrlSerializer,
+    DigestSerializer, HexSerializer, Z85Serializer,
+};
 use crate::types::SwhidVersion;
 
 /// Configuration for SWHID computation: hasher, digest encoding, and version.
@@ -30,6 +33,51 @@ impl HashConfig {
         Self {
             hash_function: Box::new(Sha256Hash),
             serializer: Box::new(HexSerializer),
+            version: SwhidVersion::V2,
+        }
+    }
+
+    /// V2 config: SHA-256 digest, base64 encoding.
+    pub fn v2_sha256_base64() -> Self {
+        Self {
+            hash_function: Box::new(Sha256Hash),
+            serializer: Box::new(Base64Serializer),
+            version: SwhidVersion::V2,
+        }
+    }
+
+    /// V2 config: SHA-256 digest, base64url encoding.
+    pub fn v2_sha256_base64url() -> Self {
+        Self {
+            hash_function: Box::new(Sha256Hash),
+            serializer: Box::new(Base64UrlSerializer),
+            version: SwhidVersion::V2,
+        }
+    }
+
+    /// V2 config: SHA-256 digest, base32 encoding.
+    pub fn v2_sha256_base32() -> Self {
+        Self {
+            hash_function: Box::new(Sha256Hash),
+            serializer: Box::new(Base32Serializer),
+            version: SwhidVersion::V2,
+        }
+    }
+
+    /// V2 config: SHA-256 digest, base32hex encoding.
+    pub fn v2_sha256_base32hex() -> Self {
+        Self {
+            hash_function: Box::new(Sha256Hash),
+            serializer: Box::new(Base32HexSerializer),
+            version: SwhidVersion::V2,
+        }
+    }
+
+    /// V2 config: SHA-256 digest, z85 encoding.
+    pub fn v2_sha256_z85() -> Self {
+        Self {
+            hash_function: Box::new(Sha256Hash),
+            serializer: Box::new(Z85Serializer),
             version: SwhidVersion::V2,
         }
     }

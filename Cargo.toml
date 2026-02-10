@@ -22,6 +22,8 @@ clap = { version = "4", features = ["derive"] }
 sha1collisiondetection = { version = "0.3" }
 sha2 = "0.10"
 git2 = { version = "0.20", optional = true }
+base64 = "0.22"
+data-encoding = "2.5"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
