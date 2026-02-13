@@ -14,12 +14,15 @@
 //! All computation goes through a single config-based path; v1 (SHA-1) is the
 //! default. Use `*_swhid_with_config` for v2 (e.g. SHA-256) or custom config.
 
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::path::Path;
+
 use crate::config::HashConfig;
 use crate::content::Content;
 use crate::directory::{Directory, Entry as DirEntry};
 use crate::error::SwhidError;
 use crate::Swhid;
-use std::path::Path;
 
 use git2::{ObjectType as GitObjectType, Repository, Signature};
 
@@ -48,10 +51,12 @@ fn content_swhid_from_blob(
 
 /// Directory SWHID digest bytes from a Git tree OID (length depends on config).
 /// Per spec 5.3: compute SWHID of each entry (content or directory), then manifest.
+/// Uses `cache` to avoid recomputing the same blob/tree SWHIDs (linear time over the DAG).
 fn directory_swhid_from_tree(
     repo: &Repository,
     tree_oid: git2::Oid,
     config: &HashConfig,
+    cache: &mut HashMap<git2::Oid, Vec<u8>>,
 ) -> Result<Vec<u8>, SwhidError> {
     let tree = repo
         .find_tree(tree_oid)
@@ -61,8 +66,18 @@ fn directory_swhid_from_tree(
         let name = entry.name_bytes().to_owned().into_boxed_slice();
         let mode = entry.filemode() as u32;
         let id = match entry.kind() {
-            Some(GitObjectType::Blob) => content_swhid_from_blob(repo, entry.id(), config)?,
-            Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, entry.id(), config)?,
+            Some(GitObjectType::Blob) => match cache.entry(entry.id()) {
+                Entry::Occupied(e) => e.get().clone(),
+                Entry::Vacant(e) => e.insert(content_swhid_from_blob(repo, entry.id(), config)?).clone(),
+            },
+            Some(GitObjectType::Tree) => match cache.entry(entry.id()) {
+                Entry::Occupied(e) => e.get().clone(),
+                Entry::Vacant(_) => {
+                    let digest = directory_swhid_from_tree(repo, entry.id(), config, cache)?;
+                    cache.insert(entry.id(), digest.clone());
+                    digest
+                }
+            },
             _ => {
                 return Err(io_error(format!(
                     "Tree entry {:?} has unsupported type",
@@ -149,7 +164,7 @@ pub fn revision_swhid_with_config(
     commit_oid: &git2::Oid,
     config: &HashConfig,
 ) -> Result<Swhid, SwhidError> {
-    revision_from_git(repo, commit_oid, config).map(|rev| rev.swhid_with_config(config))
+    revision_from_git(repo, commit_oid, config, &mut HashMap::new()).map(|rev| rev.swhid_with_config(config))
 }
 
 /// Compute a SWHID v1.2 revision identifier from a Git commit (v1 config).
@@ -165,6 +180,7 @@ pub fn revision_from_git(
     repo: &Repository,
     commit_oid: &git2::Oid,
     config: &HashConfig,
+    cache: &mut HashMap<git2::Oid, Vec<u8>>,
 ) -> Result<Revision, SwhidError> {
     let commit = repo
         .find_commit(*commit_oid)
@@ -175,11 +191,17 @@ pub fn revision_from_git(
         .map_err(|e| io_error(format!("Failed to get commit tree: {e}")))?;
 
     let tree_oid = tree.id();
-    let directory = directory_swhid_from_tree(repo, tree_oid, config)?;
+    let directory = directory_swhid_from_tree(repo, tree_oid, config, cache)?;
     let parents: Vec<Vec<u8>> = commit
         .parents()
-        .map(|p| {
-            revision_swhid_with_config(repo, &p.id(), config).map(|s| s.digest_bytes().to_vec())
+        .map(|p| match cache.entry(p.id()) {
+            Entry::Occupied(e) => Ok(e.get().clone()),
+            Entry::Vacant(_) => {
+                let rev = revision_from_git(repo, &p.id(), config, cache)?;
+                let digest = rev.swhid_with_config(config).digest_bytes().to_vec();
+                cache.insert(p.id(), digest.clone());
+                Ok(digest)
+            }
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -215,7 +237,7 @@ pub fn release_swhid_with_config(
     tag_oid: &git2::Oid,
     config: &HashConfig,
 ) -> Result<Swhid, SwhidError> {
-    release_from_git(repo, tag_oid, config).map(|rel| rel.swhid_with_config(config))
+    release_from_git(repo, tag_oid, config, &mut HashMap::new()).map(|rel| rel.swhid_with_config(config))
 }
 
 /// Compute a SWHID v1.2 release identifier from a Git tag (v1 config).
@@ -231,6 +253,7 @@ pub fn release_from_git(
     repo: &Repository,
     tag_oid: &git2::Oid,
     config: &HashConfig,
+    cache: &mut HashMap<git2::Oid, Vec<u8>>,
 ) -> Result<Release, SwhidError> {
     use crate::release::ReleaseTargetType;
 
@@ -243,14 +266,29 @@ pub fn release_from_git(
         .map_err(|e| io_error(format!("Failed to get tag target: {e}")))?;
     let target_oid = target.id();
     let object: Vec<u8> = match target.kind() {
-        Some(GitObjectType::Commit) => {
-            revision_swhid_with_config(repo, &target_oid, config)?.digest_bytes().to_vec()
-        }
-        Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, target_oid, config)?,
-        Some(GitObjectType::Blob) => content_swhid_from_blob(repo, target_oid, config)?,
-        Some(GitObjectType::Tag) => {
-            release_swhid_with_config(repo, &target_oid, config)?.digest_bytes().to_vec()
-        }
+        Some(GitObjectType::Commit) => match cache.entry(target_oid) {
+            Entry::Occupied(e) => e.get().clone(),
+            Entry::Vacant(_) => {
+                let rev = revision_from_git(repo, &target_oid, config, cache)?;
+                let digest = rev.swhid_with_config(config).digest_bytes().to_vec();
+                cache.insert(target_oid, digest.clone());
+                digest
+            }
+        },
+        Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, target_oid, config, cache)?,
+        Some(GitObjectType::Blob) => match cache.entry(target_oid) {
+            Entry::Occupied(e) => e.get().clone(),
+            Entry::Vacant(e) => e.insert(content_swhid_from_blob(repo, target_oid, config)?).clone(),
+        },
+        Some(GitObjectType::Tag) => match cache.entry(target_oid) {
+            Entry::Occupied(e) => e.get().clone(),
+            Entry::Vacant(_) => {
+                let rel = release_from_git(repo, &target_oid, config, cache)?;
+                let digest = rel.swhid_with_config(config).digest_bytes().to_vec();
+                cache.insert(target_oid, digest.clone());
+                digest
+            }
+        },
         _ => return Err(io_error("Unknown target type".to_string())),
     };
     let object_type = match target.kind() {
@@ -310,9 +348,10 @@ pub fn snapshot_from_git(
         .references()
         .map_err(|e| io_error(format!("Failed to list references: {e}")))?;
 
+    let mut cache = HashMap::new();
     let mut branches: Vec<_> = references
         .flat_map(|reference| match reference {
-            Ok(reference) => reference_to_branch(repo, reference, config).transpose(),
+            Ok(reference) => reference_to_branch(repo, reference, config, &mut cache).transpose(),
             Err(e) => Some(Err(io_error(format!("Failed to read reference: {e}")))),
         })
         .collect::<Result<_, _>>()?;
@@ -320,7 +359,7 @@ pub fn snapshot_from_git(
     let head = repo
         .head()
         .map_err(|e| io_error(format!("Failed to get HEAD: {e}")))?;
-    if let Some(head_branch) = reference_to_branch(repo, head, config)? {
+    if let Some(head_branch) = reference_to_branch(repo, head, config, &mut cache)? {
         let Branch { name, target: _ } = head_branch;
         branches.push(Branch {
             name: (*b"HEAD").into(),
@@ -335,6 +374,7 @@ fn reference_to_branch(
     repo: &Repository,
     reference: git2::Reference<'_>,
     config: &HashConfig,
+    cache: &mut HashMap<git2::Oid, Vec<u8>>,
 ) -> Result<Option<Branch>, SwhidError> {
     if !reference.is_branch() && !reference.is_tag() {
         return Ok(None);
@@ -391,20 +431,39 @@ fn reference_to_branch(
                 }
                 Some(git2::ObjectType::Any) => panic!("git2 returned an object with type 'Any'"),
                 Some(git2::ObjectType::Commit) => {
-                    let s = revision_swhid_with_config(repo, &target_id, config)?;
-                    BranchTarget::Revision(Some(s.digest_bytes().to_vec()))
+                    let digest = match cache.entry(target_id) {
+                        Entry::Occupied(e) => e.get().clone(),
+                        Entry::Vacant(_) => {
+                            let rev = revision_from_git(repo, &target_id, config, cache)?;
+                            let d = rev.swhid_with_config(config).digest_bytes().to_vec();
+                            cache.insert(target_id, d.clone());
+                            d
+                        }
+                    };
+                    BranchTarget::Revision(Some(digest))
                 }
                 Some(git2::ObjectType::Tree) => {
-                    let digest = directory_swhid_from_tree(repo, target_id, config)?;
+                    let digest = directory_swhid_from_tree(repo, target_id, config, cache)?;
                     BranchTarget::Directory(Some(digest))
                 }
                 Some(git2::ObjectType::Blob) => {
-                    let digest = content_swhid_from_blob(repo, target_id, config)?;
+                    let digest = match cache.entry(target_id) {
+                        Entry::Occupied(e) => e.get().clone(),
+                        Entry::Vacant(e) => e.insert(content_swhid_from_blob(repo, target_id, config)?).clone(),
+                    };
                     BranchTarget::Content(Some(digest))
                 }
                 Some(git2::ObjectType::Tag) => {
-                    let s = release_swhid_with_config(repo, &target_id, config)?;
-                    BranchTarget::Release(Some(s.digest_bytes().to_vec()))
+                    let digest = match cache.entry(target_id) {
+                        Entry::Occupied(e) => e.get().clone(),
+                        Entry::Vacant(_) => {
+                            let rel = release_from_git(repo, &target_id, config, cache)?;
+                            let d = rel.swhid_with_config(config).digest_bytes().to_vec();
+                            cache.insert(target_id, d.clone());
+                            d
+                        }
+                    };
+                    BranchTarget::Release(Some(digest))
                 }
             };
             target

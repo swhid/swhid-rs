@@ -54,7 +54,7 @@ fn test_revision_swhid() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid, &HashConfig::v1()).unwrap();
+    let rev = revision_from_git(&repo, &commit_oid, &HashConfig::v1(), &mut std::collections::HashMap::new()).unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -135,7 +135,7 @@ fn test_revision_negative_timezone() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid, &HashConfig::v1()).unwrap();
+    let rev = revision_from_git(&repo, &commit_oid, &HashConfig::v1(), &mut std::collections::HashMap::new()).unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -195,7 +195,7 @@ fn test_signed_revision_swhid() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid, &HashConfig::v1()).unwrap();
+    let rev = revision_from_git(&repo, &commit_oid, &HashConfig::v1(), &mut std::collections::HashMap::new()).unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -262,7 +262,7 @@ fn test_release_swhid() {
         )
         .unwrap();
 
-    let rel = release_from_git(&repo, &tag_oid, &HashConfig::v1()).unwrap();
+    let rel = release_from_git(&repo, &tag_oid, &HashConfig::v1(), &mut std::collections::HashMap::new()).unwrap();
     assert_eq!(
         rel,
         Release {
