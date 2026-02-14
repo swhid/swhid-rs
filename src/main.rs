@@ -6,7 +6,7 @@ use swhid::{
     Content, DirectoryBuildOptions, DiskDirectoryBuilder, PermissionPolicy, PermissionsSourceKind,
     WalkOptions,
 };
-use swhid::{QualifiedSwhid, Swhid};
+use swhid::{HashConfig, QualifiedSwhid, Swhid};
 
 #[cfg(feature = "git")]
 use swhid::git;
@@ -17,6 +17,12 @@ use swhid::git;
 #[command(about = "Compute and parse SWHIDs (ISO/IEC 18670)")]
 #[command(version)]
 struct Cli {
+    /// Hash algorithm (sha1, sha256). Requires matching feature. Default: sha1.
+    #[arg(long, global = true, value_name = "HASH")]
+    hash: Option<String>,
+    /// Digest encoding (hex, base64url). Requires matching feature. Default: hex.
+    #[arg(long, global = true, value_name = "FORMAT")]
+    format: Option<String>,
     #[command(subcommand)]
     cmd: Command,
 }
@@ -113,6 +119,174 @@ enum GitCommand {
     },
 }
 
+/// Compute content SWHID string; when hash/format are set use that config.
+fn content_swhid_string(
+    bytes: Vec<u8>,
+    hash: Option<&str>,
+    format: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    match (hash, format) {
+        (None, None) => Ok(Content::from_bytes(bytes).swhid().to_string()),
+        (Some("sha1"), Some("hex")) => {
+            #[cfg(all(feature = "sha1", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::v1();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
+            Err("sha1/hex not enabled (compile with default or sha1 and encoding-hex)".into())
+        }
+        (Some("sha256"), Some("base64url")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::v2();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
+            Err("sha256/base64url not enabled (compile with sha256 and encoding-base64url)".into())
+        }
+        _ => Err("unsupported --hash/--format; use e.g. --hash sha1 --format hex or --hash sha256 --format base64url".into()),
+    }
+}
+
+/// Compute directory SWHID string; when hash/format are set use that config.
+fn dir_swhid_string(
+    dir: &swhid::Directory,
+    hash: Option<&str>,
+    format: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    match (hash, format) {
+        (None, None) => Ok(dir.swhid()?.to_string()),
+        (Some("sha1"), Some("hex")) => {
+            #[cfg(all(feature = "sha1", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::v1();
+                let swhid = dir.swhid_with_config(&config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
+            Err("sha1/hex not enabled".into())
+        }
+        (Some("sha256"), Some("base64url")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::v2();
+                let swhid = dir.swhid_with_config(&config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
+            Err("sha256/base64url not enabled".into())
+        }
+        _ => Err("unsupported --hash/--format".into()),
+    }
+}
+
+#[cfg(feature = "git")]
+fn git_revision_swhid_string(
+    repo: &git2::Repository,
+    commit_oid: &git2::Oid,
+    hash: Option<&str>,
+    format: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    use std::collections::HashMap;
+    match (hash, format) {
+        (None, None) => {
+            let swhid = git::revision_swhid(repo, commit_oid, &mut HashMap::new())?;
+            Ok(swhid.to_string())
+        }
+        (Some("sha1"), Some("hex")) => {
+            #[cfg(all(feature = "sha1", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::v1();
+                let swhid =
+                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
+            Err("sha1/hex not enabled".into())
+        }
+        (Some("sha256"), Some("base64url")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::v2();
+                let swhid =
+                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
+            Err("sha256/base64url not enabled".into())
+        }
+        _ => Err("unsupported --hash/--format for git".into()),
+    }
+}
+
+#[cfg(feature = "git")]
+fn git_release_swhid_string(
+    repo: &git2::Repository,
+    tag_oid: &git2::Oid,
+    hash: Option<&str>,
+    format: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    match (hash, format) {
+        (None, None) => Ok(git::release_swhid(repo, tag_oid)?.to_string()),
+        (Some("sha1"), Some("hex")) => {
+            #[cfg(all(feature = "sha1", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::v1();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
+            Err("sha1/hex not enabled".into())
+        }
+        (Some("sha256"), Some("base64url")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::v2();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
+            Err("sha256/base64url not enabled".into())
+        }
+        _ => Err("unsupported --hash/--format for git".into()),
+    }
+}
+
+#[cfg(feature = "git")]
+fn git_snapshot_swhid_string(
+    repo: &git2::Repository,
+    hash: Option<&str>,
+    format: Option<&str>,
+) -> Result<String, Box<dyn std::error::Error>> {
+    match (hash, format) {
+        (None, None) => Ok(git::snapshot_swhid(repo)?.to_string()),
+        (Some("sha1"), Some("hex")) => {
+            #[cfg(all(feature = "sha1", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::v1();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
+            Err("sha1/hex not enabled".into())
+        }
+        (Some("sha256"), Some("base64url")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::v2();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
+            Err("sha256/base64url not enabled".into())
+        }
+        _ => Err("unsupported --hash/--format for git".into()),
+    }
+}
+
 fn parse_permissions_source(s: &str) -> Result<PermissionsSourceKind, Box<dyn std::error::Error>> {
     match s {
         "auto" => Ok(PermissionsSourceKind::Auto),
@@ -142,6 +316,8 @@ fn parse_permissions_policy(s: &str) -> Result<PermissionPolicy, Box<dyn std::er
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
+    let hash = cli.hash.as_deref();
+    let format = cli.format.as_deref();
     match cli.cmd {
         Command::Content { file } => {
             let bytes = if let Some(p) = file {
@@ -152,7 +328,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 std::io::stdin().read_to_end(&mut buf)?;
                 buf
             };
-            let s = Content::from_bytes(bytes).swhid();
+            let s = content_swhid_string(bytes, hash, format)?;
             println!("{s}");
         }
         Command::Dir {
@@ -183,8 +359,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             let dir = DiskDirectoryBuilder::new(&path).with_build_options(build_opts);
-            let swhid = dir.swhid()?;
-            println!("{swhid}");
+            let dir = dir.build()?;
+            let s = dir_swhid_string(&dir, hash, format)?;
+            println!("{s}");
         }
         Command::Parse { swhid } => {
             // Try qualified first, fallback to core
@@ -214,10 +391,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
             }
 
-            let expected: Swhid = swhid.parse()?;
-            let actual = if path.is_file() {
+            let expected_str = &swhid;
+            let actual_str = if path.is_file() {
                 let bytes = std::fs::read(&path)?;
-                Content::from_bytes(bytes).swhid()
+                content_swhid_string(bytes, hash, format)?
             } else if path.is_dir() {
                 let build_opts = DirectoryBuildOptions {
                     permissions_source: perm_source,
@@ -228,8 +405,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         exclude_suffixes: exclude,
                     },
                 };
-                let dir = DiskDirectoryBuilder::new(&path).with_build_options(build_opts);
-                dir.swhid()?
+                let dir = DiskDirectoryBuilder::new(&path).with_build_options(build_opts).build()?;
+                dir_swhid_string(&dir, hash, format)?
             } else {
                 eprintln!(
                     "Error: {} is neither a file nor a directory",
@@ -237,58 +414,79 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 );
                 std::process::exit(1);
             };
-
-            if actual == expected {
-                println!(
-                    "✓ Verification successful: {} matches {}",
-                    path.display(),
-                    expected
-                );
-                std::process::exit(0);
+            if hash.is_some() && format.is_some() {
+                if actual_str == *expected_str {
+                    println!(
+                        "✓ Verification successful: {} matches {}",
+                        path.display(),
+                        expected_str
+                    );
+                    std::process::exit(0);
+                } else {
+                    println!(
+                        "✗ Verification failed: {} does not match {}",
+                        path.display(),
+                        expected_str
+                    );
+                    println!("  Expected: {expected_str}");
+                    println!("  Actual:   {actual_str}");
+                    std::process::exit(1);
+                }
             } else {
-                println!(
-                    "✗ Verification failed: {} does not match {}",
-                    path.display(),
-                    expected
-                );
-                println!("  Expected: {expected}");
-                println!("  Actual:   {actual}");
-                std::process::exit(1);
+                let expected: Swhid = expected_str.parse()?;
+                let actual: Swhid = actual_str.parse().map_err(|e| format!("Computed SWHID did not parse: {e}"))?;
+                if actual == expected {
+                    println!(
+                        "✓ Verification successful: {} matches {}",
+                        path.display(),
+                        expected
+                    );
+                    std::process::exit(0);
+                } else {
+                    println!(
+                        "✗ Verification failed: {} does not match {}",
+                        path.display(),
+                        expected
+                    );
+                    println!("  Expected: {expected}");
+                    println!("  Actual:   {actual}");
+                    std::process::exit(1);
+                }
             }
         }
         #[cfg(feature = "git")]
         Command::Git { cmd } => match cmd {
-            GitCommand::Revision { repo, commit } => {
-                let repo = git::open_repo(&repo)?;
-                let commit_oid = if let Some(commit_str) = commit {
-                    git2::Oid::from_str(&commit_str)
-                        .map_err(|e| format!("Invalid commit hash: {e}"))?
-                } else {
-                    git::get_head_commit(&repo)?
-                };
-                let swhid = git::revision_swhid(&repo, &commit_oid, &mut HashMap::new())?;
-                println!("{swhid}");
-            }
-            GitCommand::Release { repo, tag } => {
-                let repo = git::open_repo(&repo)?;
-                let tag_oid = repo
-                    .refname_to_id(&format!("refs/tags/{tag}"))
-                    .map_err(|e| format!("Tag not found: {e}"))?;
-                let swhid = git::release_swhid(&repo, &tag_oid)?;
-                println!("{swhid}");
-            }
-            GitCommand::Snapshot { repo } => {
-                let repo = git::open_repo(&repo)?;
-                let swhid = git::snapshot_swhid(&repo)?;
-                println!("{swhid}");
-            }
-            GitCommand::Tags { repo } => {
-                let repo = git::open_repo(&repo)?;
-                let tags = git::get_tags(&repo)?;
-                for tag_oid in tags {
-                    println!("{tag_oid}");
+                GitCommand::Revision { repo, commit } => {
+                    let repo = git::open_repo(&repo)?;
+                    let commit_oid = if let Some(commit_str) = commit {
+                        git2::Oid::from_str(&commit_str)
+                            .map_err(|e| format!("Invalid commit hash: {e}"))?
+                    } else {
+                        git::get_head_commit(&repo)?
+                    };
+                    let s = git_revision_swhid_string(&repo, &commit_oid, hash, format)?;
+                    println!("{s}");
                 }
-            }
+                GitCommand::Release { repo, tag } => {
+                    let repo = git::open_repo(&repo)?;
+                    let tag_oid = repo
+                        .refname_to_id(&format!("refs/tags/{tag}"))
+                        .map_err(|e| format!("Tag not found: {e}"))?;
+                    let s = git_release_swhid_string(&repo, &tag_oid, hash, format)?;
+                    println!("{s}");
+                }
+                GitCommand::Snapshot { repo } => {
+                    let repo = git::open_repo(&repo)?;
+                    let s = git_snapshot_swhid_string(&repo, hash, format)?;
+                    println!("{s}");
+                }
+                GitCommand::Tags { repo } => {
+                    let repo = git::open_repo(&repo)?;
+                    let tags = git::get_tags(&repo)?;
+                    for tag_oid in tags {
+                        println!("{tag_oid}");
+                    }
+                }
         },
     }
     Ok(())
