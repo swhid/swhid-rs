@@ -17,12 +17,14 @@ use std::path::Path;
 
 use git2::{ObjectType as GitObjectType, Repository, Signature};
 
+use crate::config::HashConfig;
 use crate::digest::Digest;
 use crate::directory::{dir_manifest, Entry as DirEntry};
 use crate::error::SwhidError;
-use crate::hash::{hash_content, hash_swhid_object};
+use crate::hash::{hash_content, hash_swhid_object, HashFunction};
 use crate::release::Release;
 use crate::revision::Revision;
+use crate::serialization::DigestSerializer;
 use crate::snapshot::{Branch, BranchTarget, Snapshot};
 use crate::Bytestring;
 use crate::Swhid;
@@ -39,6 +41,21 @@ fn content_swhid_from_blob(repo: &Repository, blob_oid: git2::Oid) -> Result<Dig
         .map_err(|e| io_error(format!("Failed to find blob {blob_oid}: {e}")))?;
     let bytes = blob.content();
     Ok(Digest::from(hash_content(bytes)))
+}
+
+/// Content SWHID digest using the given hasher.
+fn content_swhid_from_blob_with<H: HashFunction>(
+    repo: &Repository,
+    blob_oid: git2::Oid,
+    hasher: &H,
+) -> Result<Digest, SwhidError>
+where
+    H::Output: Into<Digest>,
+{
+    let blob = repo
+        .find_blob(blob_oid)
+        .map_err(|e| io_error(format!("Failed to find blob {blob_oid}: {e}")))?;
+    Ok(hasher.hash_object("blob", blob.content()).into())
 }
 
 /// Directory SWHID digest from a Git tree OID.
@@ -80,6 +97,52 @@ fn directory_swhid_from_tree(
     let manifest =
         dir_manifest(entries).map_err(|e| io_error(format!("Directory manifest: {e}")))?;
     Ok(Digest::from(hash_swhid_object("tree", &manifest)))
+}
+
+/// Directory SWHID digest using the given hasher.
+fn directory_swhid_from_tree_with<H: HashFunction>(
+    repo: &Repository,
+    tree_oid: git2::Oid,
+    cache: &mut HashMap<git2::Oid, Digest>,
+    hasher: &H,
+) -> Result<Digest, SwhidError>
+where
+    H::Output: Into<Digest>,
+{
+    let tree = repo
+        .find_tree(tree_oid)
+        .map_err(|e| io_error(format!("Failed to find tree {tree_oid}: {e}")))?;
+    let mut entries: Vec<DirEntry> = Vec::new();
+    for entry in tree.iter() {
+        let name = entry.name_bytes().to_owned().into_boxed_slice();
+        let mode = entry.filemode() as u32;
+        let id = match entry.kind() {
+            Some(GitObjectType::Blob) => match cache.entry(entry.id()) {
+                Entry::Occupied(e) => e.get().clone(),
+                Entry::Vacant(e) => {
+                    e.insert(content_swhid_from_blob_with(repo, entry.id(), hasher)?).clone()
+                }
+            },
+            Some(GitObjectType::Tree) => match cache.entry(entry.id()) {
+                Entry::Occupied(e) => e.get().clone(),
+                Entry::Vacant(_) => {
+                    let digest = directory_swhid_from_tree_with(repo, entry.id(), cache, hasher)?;
+                    cache.insert(entry.id(), digest.clone());
+                    digest
+                }
+            },
+            _ => {
+                return Err(io_error(format!(
+                    "Tree entry {:?} has unsupported type",
+                    entry.name()
+                )));
+            }
+        };
+        entries.push(DirEntry::new(name, mode, id));
+    }
+    let manifest =
+        dir_manifest(entries).map_err(|e| io_error(format!("Directory manifest: {e}")))?;
+    Ok(hasher.hash_object("tree", &manifest).into())
 }
 
 fn parse_signature(sig: Signature) -> (Bytestring, i64, Bytestring) {
@@ -215,6 +278,84 @@ pub fn revision_from_git(
     })
 }
 
+/// Compute revision SWHID using the given hash and encoding config.
+pub fn revision_swhid_with_config<H, E>(
+    repo: &Repository,
+    commit_oid: &git2::Oid,
+    cache: &mut HashMap<git2::Oid, Digest>,
+    config: &HashConfig<H, E>,
+) -> Result<Swhid, SwhidError>
+where
+    H: HashFunction,
+    E: DigestSerializer,
+    H::Output: Into<Digest>,
+{
+    revision_from_git_with_config(repo, commit_oid, cache, config)
+        .map(|rev| rev.swhid_with_config(config))
+}
+
+#[doc(hidden)]
+pub fn revision_from_git_with_config<H, E>(
+    repo: &Repository,
+    commit_oid: &git2::Oid,
+    cache: &mut HashMap<git2::Oid, Digest>,
+    config: &HashConfig<H, E>,
+) -> Result<Revision, SwhidError>
+where
+    H: HashFunction,
+    E: DigestSerializer,
+    H::Output: Into<Digest>,
+{
+    let commit = repo
+        .find_commit(*commit_oid)
+        .map_err(|e| io_error(format!("Failed to find commit: {e}")))?;
+
+    let tree = commit
+        .tree()
+        .map_err(|e| io_error(format!("Failed to get commit tree: {e}")))?;
+
+    let tree_oid = tree.id();
+    let directory =
+        directory_swhid_from_tree_with(repo, tree_oid, cache, &config.hash)?;
+    let parents: Vec<Digest> = commit
+        .parents()
+        .map(|p| match cache.entry(p.id()) {
+            Entry::Occupied(e) => Ok(e.get().clone()),
+            Entry::Vacant(_) => {
+                let digest =
+                    revision_swhid_with_config(repo, &p.id(), cache, config)?.digest().clone();
+                cache.insert(p.id(), digest.clone());
+                Ok(digest)
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let (author, author_timestamp, author_timestamp_offset) = parse_signature(commit.author());
+    let (committer, committer_timestamp, committer_timestamp_offset) =
+        parse_signature(commit.committer());
+
+    let headers = parse_header(commit.raw_header_bytes())?;
+
+    let extra_headers = headers
+        .into_iter()
+        .filter(|(key, _value)| !matches!(*key, b"tree" | b"parent" | b"author" | b"committer"))
+        .map(|(key, value)| (key.into(), value))
+        .collect();
+
+    Ok(Revision {
+        directory,
+        parents,
+        author,
+        author_timestamp,
+        author_timestamp_offset,
+        committer,
+        committer_timestamp,
+        committer_timestamp_offset,
+        extra_headers,
+        message: Some(commit.message_bytes().into()),
+    })
+}
+
 /// Compute a SWHID v1.2 release identifier from a Git tag
 ///
 /// This implements the SWHID v1.2 release hashing algorithm for Git tags,
@@ -278,6 +419,96 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
     })
 }
 
+/// Compute release SWHID using the given hash and encoding config.
+pub fn release_swhid_with_config<H, E>(
+    repo: &Repository,
+    tag_oid: &git2::Oid,
+    config: &HashConfig<H, E>,
+) -> Result<Swhid, SwhidError>
+where
+    H: HashFunction,
+    E: DigestSerializer,
+    H::Output: Into<Digest>,
+{
+    release_from_git_with_config(repo, tag_oid, config).map(|rel| rel.swhid_with_config(config))
+}
+
+#[doc(hidden)]
+pub fn release_from_git_with_config<H, E>(
+    repo: &Repository,
+    tag_oid: &git2::Oid,
+    config: &HashConfig<H, E>,
+) -> Result<Release, SwhidError>
+where
+    H: HashFunction,
+    E: DigestSerializer,
+    H::Output: Into<Digest>,
+{
+    use crate::release::ReleaseTargetType;
+
+    let tag = repo
+        .find_tag(*tag_oid)
+        .map_err(|e| io_error(format!("Failed to find tag: {e}")))?;
+
+    let target = tag
+        .target()
+        .map_err(|e| io_error(format!("Failed to get tag target: {e}")))?;
+    let target_oid = target.id();
+    let mut cache = HashMap::new();
+    let object = match target.kind() {
+        Some(GitObjectType::Commit) => revision_swhid_with_config(
+            repo,
+            &target_oid,
+            &mut cache,
+            config,
+        )?
+        .digest()
+        .clone(),
+        Some(GitObjectType::Tree) => {
+            directory_swhid_from_tree_with(repo, target_oid, &mut cache, &config.hash)?
+        }
+        Some(GitObjectType::Blob) => {
+            content_swhid_from_blob_with(repo, target_oid, &config.hash)?
+        }
+        Some(GitObjectType::Tag) => {
+            release_swhid_with_config(repo, &target_oid, config)?
+                .digest()
+                .clone()
+        }
+        _ => return Err(io_error("Unknown target type".to_string())),
+    };
+    let object_type = match target.kind() {
+        Some(GitObjectType::Commit) => ReleaseTargetType::Revision,
+        Some(GitObjectType::Tree) => ReleaseTargetType::Directory,
+        Some(GitObjectType::Blob) => ReleaseTargetType::Content,
+        Some(GitObjectType::Tag) => ReleaseTargetType::Release,
+        _ => return Err(io_error("Unknown target type".to_string())),
+    };
+
+    let (author, author_timestamp, author_timestamp_offset) = match tag.tagger() {
+        Some(tagger) => {
+            let (author, author_timestamp, author_timestamp_offset) = parse_signature(tagger);
+            (
+                Some(author),
+                Some(author_timestamp),
+                Some(author_timestamp_offset),
+            )
+        }
+        None => (None, None, None),
+    };
+
+    Ok(Release {
+        object,
+        object_type,
+        name: tag.name_bytes().into(),
+        author,
+        author_timestamp,
+        author_timestamp_offset,
+        extra_headers: Vec::new(),
+        message: tag.message_bytes().map(Into::into),
+    })
+}
+
 /// Compute a SWHID v1.2 snapshot identifier from a Git repository
 ///
 /// This implements the SWHID v1.2 snapshot hashing algorithm for Git repositories,
@@ -304,6 +535,57 @@ pub fn snapshot_from_git(repo: &Repository) -> Result<Snapshot, SwhidError> {
         .head()
         .map_err(|e| io_error(format!("Failed to get HEAD: {e}")))?;
     if let Some(head_branch) = reference_to_branch(repo, head, &mut cache)? {
+        let Branch { name, target: _ } = head_branch;
+        branches.push(Branch {
+            name: (*b"HEAD").into(),
+            target: BranchTarget::Alias(Some(name)),
+        });
+    }
+
+    Snapshot::new(branches).map_err(|e| io_error(format!("Invalid snapshot: {e}")))
+}
+
+/// Compute snapshot SWHID using the given hash and encoding config.
+pub fn snapshot_swhid_with_config<H, E>(
+    repo: &Repository,
+    config: &HashConfig<H, E>,
+) -> Result<Swhid, SwhidError>
+where
+    H: HashFunction,
+    E: DigestSerializer,
+    H::Output: Into<Digest>,
+{
+    snapshot_from_git_with_config(repo, config).map(|snp| snp.swhid_with_config(config))
+}
+
+#[doc(hidden)]
+pub fn snapshot_from_git_with_config<H, E>(
+    repo: &Repository,
+    config: &HashConfig<H, E>,
+) -> Result<Snapshot, SwhidError>
+where
+    H: HashFunction,
+    E: DigestSerializer,
+    H::Output: Into<Digest>,
+{
+    let references = repo
+        .references()
+        .map_err(|e| io_error(format!("Failed to list references: {e}")))?;
+
+    let mut cache = HashMap::new();
+    let mut branches: Vec<_> = references
+        .flat_map(|reference| match reference {
+            Ok(reference) => {
+                reference_to_branch_with_config(repo, reference, &mut cache, config).transpose()
+            }
+            Err(e) => Some(Err(io_error(format!("Failed to read reference: {e}")))),
+        })
+        .collect::<Result<_, _>>()?;
+
+    let head = repo
+        .head()
+        .map_err(|e| io_error(format!("Failed to get HEAD: {e}")))?;
+    if let Some(head_branch) = reference_to_branch_with_config(repo, head, &mut cache, config)? {
         let Branch { name, target: _ } = head_branch;
         branches.push(Branch {
             name: (*b"HEAD").into(),
@@ -390,6 +672,101 @@ fn reference_to_branch(
                 }
                 Some(git2::ObjectType::Tag) => {
                     let digest = release_swhid(repo, &target_id)?.digest().clone();
+                    BranchTarget::Release(Some(digest))
+                }
+            };
+            target
+        }
+        Some(git2::ReferenceType::Symbolic) => {
+            let Some(target) = reference.symbolic_target_bytes() else {
+                return Err(io_error(format!(
+                    "Reference {} has Symbolic kind, but has no symbolic target",
+                    String::from_utf8_lossy(&name)
+                )));
+            };
+            BranchTarget::Alias(Some(target.into()))
+        }
+    };
+    Ok(Some(Branch { name, target }))
+}
+
+fn reference_to_branch_with_config<H, E>(
+    repo: &Repository,
+    reference: git2::Reference<'_>,
+    cache: &mut HashMap<git2::Oid, Digest>,
+    config: &HashConfig<H, E>,
+) -> Result<Option<Branch>, SwhidError>
+where
+    H: HashFunction,
+    E: DigestSerializer,
+    H::Output: Into<Digest>,
+{
+    if !reference.is_branch() && !reference.is_tag() {
+        return Ok(None);
+    }
+
+    let name = reference.name_bytes().to_owned().into_boxed_slice();
+    let target = match reference.kind() {
+        None => {
+            if reference.target().is_some() {
+                return Err(io_error(format!(
+                    "Reference {} has None kind, but has a target",
+                    String::from_utf8_lossy(&name)
+                )));
+            }
+            if reference.symbolic_target_bytes().is_some() {
+                return Err(io_error(format!(
+                    "Reference {} has None kind, but has a symbolic target",
+                    String::from_utf8_lossy(&name)
+                )));
+            }
+            BranchTarget::Revision(None)
+        }
+        Some(git2::ReferenceType::Direct) => {
+            let Some(target_id) = reference.target() else {
+                return Err(io_error(format!(
+                    "Reference {} has Direct kind, but has no target",
+                    String::from_utf8_lossy(&name)
+                )));
+            };
+            let target = match repo.find_object(target_id, None) {
+                Ok(obj) => obj,
+                Err(e) if e.code() == git2::ErrorCode::NotFound => {
+                    return Ok(Some(Branch {
+                        name,
+                        target: BranchTarget::Revision(None),
+                    }));
+                }
+                Err(e) => {
+                    return Err(io_error(format!("Could not find object {target_id}: {e}")));
+                }
+            };
+            let target = match target.kind() {
+                None => BranchTarget::Revision(None),
+                Some(git2::ObjectType::Any) => panic!("git2 returned an object with type 'Any'"),
+                Some(git2::ObjectType::Commit) => {
+                    let digest =
+                        revision_swhid_with_config(repo, &target_id, cache, config)?.digest().clone();
+                    BranchTarget::Revision(Some(digest))
+                }
+                Some(git2::ObjectType::Tree) => {
+                    let digest =
+                        directory_swhid_from_tree_with(repo, target_id, cache, &config.hash)?;
+                    BranchTarget::Directory(Some(digest))
+                }
+                Some(git2::ObjectType::Blob) => {
+                    let digest = match cache.entry(target_id) {
+                        Entry::Occupied(e) => e.get().clone(),
+                        Entry::Vacant(e) => {
+                            e.insert(content_swhid_from_blob_with(repo, target_id, &config.hash)?)
+                                .clone()
+                        }
+                    };
+                    BranchTarget::Content(Some(digest))
+                }
+                Some(git2::ObjectType::Tag) => {
+                    let digest =
+                        release_swhid_with_config(repo, &target_id, config)?.digest().clone();
                     BranchTarget::Release(Some(digest))
                 }
             };

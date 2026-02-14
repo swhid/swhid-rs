@@ -4,10 +4,12 @@ use std::path::Path;
 
 use std::path::PathBuf;
 
+use crate::config::HashConfig;
 use crate::core::{ObjectType, Swhid};
 use crate::digest::Digest;
 use crate::error::DirectoryError;
-use crate::hash::{hash_content, hash_swhid_object};
+use crate::hash::{hash_content, hash_swhid_object, HashFunction};
+use crate::serialization::DigestSerializer;
 use crate::permissions::{
     resolve_file_permissions, EntryPerms, PermissionPolicy, PermissionsSource,
     PermissionsSourceKind,
@@ -358,6 +360,18 @@ impl Directory {
             ObjectType::Directory,
             hash_swhid_object("tree", &manifest),
         ))
+    }
+
+    /// Compute the SWHID using the given hash and encoding config.
+    pub fn swhid_with_config<H, E>(&self, config: &HashConfig<H, E>) -> Result<Swhid, crate::error::SwhidError>
+    where
+        H: HashFunction,
+        E: DigestSerializer,
+        H::Output: Into<Digest>,
+    {
+        let manifest = dir_manifest_unchecked(&self.entries);
+        let digest = config.hash.hash_object("tree", &manifest).into();
+        Ok(Swhid::new(ObjectType::Directory, digest, config.version))
     }
 }
 

@@ -1,4 +1,7 @@
+use crate::config::HashConfig;
 use crate::digest::Digest;
+use crate::hash::HashFunction;
+use crate::serialization::DigestSerializer;
 use crate::utils::HeaderWriter;
 use crate::{Bytestring, Swhid};
 
@@ -26,6 +29,18 @@ impl Revision {
         let digest = crate::hash::hash_swhid_object("commit", &manifest);
 
         Swhid::new_v1(crate::ObjectType::Revision, digest)
+    }
+
+    /// Compute the SWHID using the given hash and encoding config.
+    pub fn swhid_with_config<H, E>(&self, config: &HashConfig<H, E>) -> Swhid
+    where
+        H: HashFunction,
+        E: DigestSerializer,
+        H::Output: Into<Digest>,
+    {
+        let manifest = rev_manifest(self);
+        let digest = config.hash.hash_object("commit", &manifest).into();
+        Swhid::new(crate::ObjectType::Revision, digest, config.version)
     }
 }
 

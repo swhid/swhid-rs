@@ -1,7 +1,9 @@
+use crate::config::HashConfig;
 use crate::core::{ObjectType, Swhid};
 use crate::digest::Digest;
 use crate::error::SnapshotError;
-use crate::hash::hash_swhid_object;
+use crate::hash::{hash_swhid_object, HashFunction};
+use crate::serialization::DigestSerializer;
 use crate::utils::check_unique;
 use crate::Bytestring;
 
@@ -65,6 +67,18 @@ impl Snapshot {
             ObjectType::Snapshot,
             hash_swhid_object("snapshot", &manifest),
         )
+    }
+
+    /// Compute the SWHID using the given hash and encoding config.
+    pub fn swhid_with_config<H, E>(&self, config: &HashConfig<H, E>) -> Swhid
+    where
+        H: HashFunction,
+        E: DigestSerializer,
+        H::Output: Into<Digest>,
+    {
+        let manifest = snp_manifest_unchecked(&self.branches);
+        let digest = config.hash.hash_object("snapshot", &manifest).into();
+        Swhid::new(ObjectType::Snapshot, digest, config.version)
     }
 }
 

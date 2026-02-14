@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use crate::digest::Digest;
 use crate::error::SwhidError;
+use crate::serialization::DigestSerializer;
 use crate::types::SwhidVersion;
 
 /// Known SWH object kinds.
@@ -85,6 +86,16 @@ impl Swhid {
 
     pub fn version(&self) -> SwhidVersion {
         self.version
+    }
+
+    /// Format SWHID using the given digest encoder (e.g. hex for v1, base64url for v2).
+    pub fn to_string_encoded<E: DigestSerializer>(&self, encoder: &E) -> String {
+        format!(
+            "swh:{}:{}:{}",
+            self.version.as_str(),
+            self.object_type.as_tag(),
+            encoder.encode(self.digest_bytes())
+        )
     }
 }
 
