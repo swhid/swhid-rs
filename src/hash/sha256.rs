@@ -18,13 +18,3 @@ impl HashFunction for Sha256Hash {
         hasher.finalize().into()
     }
 }
-
-/// Content SWHID digest (blob) for SHA-256.
-pub fn hash_content_sha256(data: &[u8]) -> [u8; 32] {
-    Sha256Hash.hash_object("blob", data)
-}
-
-/// Arbitrary SWHID object digest for SHA-256.
-pub fn hash_swhid_object_sha256(typ: &str, payload: &[u8]) -> [u8; 32] {
-    Sha256Hash.hash_object(typ, payload)
-}
