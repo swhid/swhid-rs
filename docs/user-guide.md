@@ -107,6 +107,7 @@ When using `--hash` and `--format`, **verify** compares the computed and expecte
 | `sha1`           | SHA-1 (default)                      |
 | `sha256`         | SHA-256                              |
 | `sha512`         | SHA-512                              |
+| `sha512`         | SHA-512                              |
 | `encoding-hex`   | Hex encoding (default)               |
 | `encoding-base64`| Base64 encoding                      |
 | `encoding-base64url` | Base64url encoding               |
