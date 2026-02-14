@@ -1,5 +1,5 @@
 use swhid::content::*;
-use swhid::{ObjectType, Swhid};
+use swhid::{HashConfig, ObjectType, Swhid};
 
 #[test]
 fn content_from_bytes() {
@@ -183,4 +183,18 @@ fn content_swhid_hash_consistency() {
     let swhid1 = content.swhid();
     let swhid2 = content.swhid();
     assert_eq!(swhid1, swhid2);
+}
+
+#[cfg(all(feature = "sha1", feature = "encoding-hex"))]
+#[test]
+fn content_swhid_with_config_v1_matches_default() {
+    let content = Content::from_bytes(b"config test");
+    let default_swhid = content.swhid();
+    let config = HashConfig::v1();
+    let config_swhid = content.swhid_with_config(&config);
+    assert_eq!(default_swhid, config_swhid);
+    assert_eq!(
+        default_swhid.to_string(),
+        config_swhid.to_string_encoded(&config.encoder)
+    );
 }

@@ -16,10 +16,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Check formatting
         run: cargo fmt -- --check
       - name: Run clippy
         run: cargo clippy
-      - name: Run tests
+      - name: Run tests (default features)
         run: RUST_BACKTRACE=full cargo test --verbose
+      - name: Run tests (with git)
+        run: RUST_BACKTRACE=full cargo test --features git --verbose
