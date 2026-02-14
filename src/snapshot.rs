@@ -1,4 +1,5 @@
 use crate::core::{ObjectType, Swhid};
+use crate::digest::Digest;
 use crate::error::SnapshotError;
 use crate::hash::hash_swhid_object;
 use crate::utils::check_unique;
@@ -6,11 +7,11 @@ use crate::Bytestring;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum BranchTarget {
-    Content(Option<[u8; 20]>),
-    Directory(Option<[u8; 20]>),
-    Revision(Option<[u8; 20]>),
-    Release(Option<[u8; 20]>),
-    Snapshot(Option<[u8; 20]>),
+    Content(Option<Digest>),
+    Directory(Option<Digest>),
+    Revision(Option<Digest>),
+    Release(Option<Digest>),
+    Snapshot(Option<Digest>),
     Alias(Option<Bytestring>),
 }
 
@@ -21,7 +22,7 @@ impl BranchTarget {
             | BranchTarget::Directory(id)
             | BranchTarget::Revision(id)
             | BranchTarget::Release(id)
-            | BranchTarget::Snapshot(id) => id.as_ref().map(AsRef::as_ref).unwrap_or(b""),
+            | BranchTarget::Snapshot(id) => id.as_ref().map(Digest::as_bytes).unwrap_or(b""),
             BranchTarget::Alias(id) => id.as_ref().map(AsRef::as_ref).unwrap_or(b""),
         }
     }
@@ -60,7 +61,7 @@ impl Snapshot {
     /// Compute the SWHID v1.2 snapshot identifier for this snapshot.
     pub fn swhid(&self) -> Swhid {
         let manifest = snp_manifest_unchecked(&self.branches);
-        Swhid::new(
+        Swhid::new_v1(
             ObjectType::Snapshot,
             hash_swhid_object("snapshot", &manifest),
         )

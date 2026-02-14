@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use assert_fs::prelude::*;
 use git2::{Repository, Signature, Time};
 
+use swhid::digest::Digest;
 use swhid::git::*;
 use swhid::release::{Release, ReleaseTargetType};
 use swhid::revision::Revision;
@@ -35,7 +36,7 @@ fn test_revision_swhid() {
         .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: [u8; 20] = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
@@ -59,7 +60,7 @@ fn test_revision_swhid() {
     assert_eq!(
         rev,
         Revision {
-            directory: tree_hash,
+            directory: Digest::from(tree_hash),
             parents: Vec::new(),
             author: bs("Test User <test@example.com>"),
             author_timestamp: 1763027354,
@@ -103,7 +104,7 @@ fn test_revision_negative_timezone() {
         .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: [u8; 20] = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
@@ -132,7 +133,7 @@ fn test_revision_negative_timezone() {
     assert_eq!(
         rev,
         Revision {
-            directory: tree_hash,
+            directory: Digest::from(tree_hash),
             parents: Vec::new(),
             author: bs("Test User <test@example.com>"),
             author_timestamp: 1763027354,
@@ -167,7 +168,7 @@ fn test_signed_revision_swhid() {
         .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: [u8; 20] = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
@@ -192,7 +193,7 @@ fn test_signed_revision_swhid() {
     assert_eq!(
         rev,
         Revision {
-            directory: tree_hash,
+            directory: Digest::from(tree_hash),
             parents: Vec::new(),
             author: bs("Test User <test@example.com>"),
             author_timestamp: 1763027354,
@@ -236,7 +237,7 @@ fn test_release_swhid() {
         .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: [u8; 20] = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
@@ -255,11 +256,11 @@ fn test_release_swhid() {
         )
         .unwrap();
 
-    let rev = release_from_git(&repo, &tag_oid).unwrap();
+    let rel = release_from_git(&repo, &tag_oid).unwrap();
     assert_eq!(
-        rev,
+        rel,
         Release {
-            object: tree_hash,
+            object: Digest::from(tree_hash),
             object_type: ReleaseTargetType::Directory,
             name: bs("v1.0"),
             author: Some(bs("Test User <test@example.com>")),
@@ -301,7 +302,7 @@ fn test_snapshot_swhid() {
         .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: [u8; 20] = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
@@ -329,7 +330,7 @@ fn test_snapshot_swhid() {
             &[],
         )
         .unwrap();
-    let commit_hash = hex::decode("07cde6575fb633ef9b5ecbe730e6eb97475a2fd9")
+    let commit_hash: [u8; 20] = hex::decode("07cde6575fb633ef9b5ecbe730e6eb97475a2fd9")
         .unwrap()
         .try_into()
         .unwrap();
@@ -345,7 +346,7 @@ fn test_snapshot_swhid() {
             /* force: */ false,
         )
         .unwrap();
-    let tag_hash = hex::decode("46d326edb8bfc49b757ccd09930365595806bfc0")
+    let tag_hash: [u8; 20] = hex::decode("46d326edb8bfc49b757ccd09930365595806bfc0")
         .unwrap()
         .try_into()
         .unwrap();
@@ -363,15 +364,15 @@ fn test_snapshot_swhid() {
             },
             Branch {
                 name: bs("refs/heads/main"),
-                target: BranchTarget::Revision(Some(commit_hash)),
+                target: BranchTarget::Revision(Some(Digest::from(commit_hash))),
             },
             Branch {
                 name: bs("refs/tags/v1.0"),
-                target: BranchTarget::Release(Some(tag_hash)),
+                target: BranchTarget::Release(Some(Digest::from(tag_hash))),
             },
             Branch {
                 name: bs("refs/heads/tree-branch"),
-                target: BranchTarget::Directory(Some(tree_hash)),
+                target: BranchTarget::Directory(Some(Digest::from(tree_hash))),
             },
         ])
         .unwrap(),

@@ -1,5 +1,6 @@
 use assert_fs::prelude::*;
 
+use swhid::digest::Digest;
 use swhid::directory::*;
 use swhid::hash::hash_content;
 use swhid::ObjectType;
@@ -11,9 +12,9 @@ fn name(s: &'static str) -> Box<[u8]> {
 #[test]
 fn simple_dir_hash() {
     let dir = Directory::new(vec![
-        Entry::new(name("a.txt"), 0o100644, [1; 20]),
-        Entry::new(name("b.txt"), 0o100755, [2; 20]),
-        Entry::new(name("c.txt"), 0o100644, [0; 20]),
+        Entry::new(name("a.txt"), 0o100644, Digest::from([1; 20])),
+        Entry::new(name("b.txt"), 0o100755, Digest::from([2; 20])),
+        Entry::new(name("c.txt"), 0o100644, Digest::from([0; 20])),
     ])
     .unwrap();
 
@@ -36,9 +37,9 @@ fn simple_dir_hash() {
 #[test]
 fn dir_order() {
     let dir = Directory::new(vec![
-        Entry::new(name("a.txt"), 0o100644, [1; 20]),
-        Entry::new(name("c.txt"), 0o100644, [0; 20]),
-        Entry::new(name("b.txt"), 0o100755, [2; 20]),
+        Entry::new(name("a.txt"), 0o100644, Digest::from([1; 20])),
+        Entry::new(name("c.txt"), 0o100644, Digest::from([0; 20])),
+        Entry::new(name("b.txt"), 0o100755, Digest::from([2; 20])),
     ])
     .unwrap();
 
@@ -74,8 +75,8 @@ fn empty_dir_hash() {
 #[test]
 fn dir_with_symlinks() {
     let dir = Directory::new(vec![
-        Entry::new(name("a.txt"), 0o100644, [1; 20]),
-        Entry::new(name("b.txt"), 0o120000, [2; 20]),
+        Entry::new(name("a.txt"), 0o100644, Digest::from([1; 20])),
+        Entry::new(name("b.txt"), 0o120000, Digest::from([2; 20])),
     ])
     .unwrap();
 
@@ -97,8 +98,8 @@ fn dir_with_symlinks() {
 #[test]
 fn dir_with_subdir() {
     let dir = Directory::new(vec![
-        Entry::new(name("a.txt"), 0o100644, [1; 20]),
-        Entry::new(name("b"), 0o040000, [2; 20]),
+        Entry::new(name("a.txt"), 0o100644, Digest::from([1; 20])),
+        Entry::new(name("b"), 0o040000, Digest::from([2; 20])),
     ])
     .unwrap();
 
@@ -135,8 +136,8 @@ fn read_simple_dir() {
     let dir = DiskDirectoryBuilder::new(tmp.path()).build().unwrap();
 
     let expected_dir = Directory::new(vec![
-        Entry::new(name("a.txt"), 0o100644, hash_content(b"A")),
-        Entry::new(name("b.txt"), 0o100644, hash_content(b"B")),
+        Entry::new(name("a.txt"), 0o100644, Digest::from(hash_content(b"A"))),
+        Entry::new(name("b.txt"), 0o100644, Digest::from(hash_content(b"B"))),
     ])
     .unwrap();
 
@@ -159,12 +160,12 @@ fn read_dir_with_unicode_filenames() {
             Entry::new(
                 name("файл.txt"),
                 0o100644,
-                hash_content(b"cyrillic filename"),
+                Digest::from(hash_content(b"cyrillic filename")),
             ),
             Entry::new(
                 name("文件.txt"),
                 0o100644,
-                hash_content(b"unicode filename"),
+                Digest::from(hash_content(b"unicode filename")),
             ),
         ]
     );
@@ -194,11 +195,11 @@ fn read_dir_with_symlinks() {
     assert_eq!(
         dir.entries(),
         vec![
-            Entry::new(name("link.txt"), 0o120000, hash_content(b"target.txt")),
+            Entry::new(name("link.txt"), 0o120000, Digest::from(hash_content(b"target.txt"))),
             Entry::new(
                 name("target.txt"),
                 0o100644,
-                hash_content(b"target content")
+                Digest::from(hash_content(b"target content"))
             ),
         ]
     );
@@ -221,11 +222,11 @@ fn read_dir_with_followed_symlinks() {
     assert_eq!(
         dir.entries(),
         vec![
-            Entry::new(name("link.txt"), 0o100644, hash_content(b"target content")),
+            Entry::new(name("link.txt"), 0o100644, Digest::from(hash_content(b"target content"))),
             Entry::new(
                 name("target.txt"),
                 0o100644,
-                hash_content(b"target content")
+                Digest::from(hash_content(b"target content"))
             ),
         ]
     );
@@ -251,7 +252,7 @@ fn read_dir_with_exclude_patterns() {
         vec![Entry::new(
             name("keep.txt"),
             0o100644,
-            hash_content(b"keep")
+            Digest::from(hash_content(b"keep"))
         ),]
     );
 }

@@ -1,10 +1,11 @@
+use crate::digest::Digest;
 use crate::utils::HeaderWriter;
 use crate::{Bytestring, Swhid};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Revision {
-    pub directory: [u8; 20],
-    pub parents: Vec<[u8; 20]>,
+    pub directory: Digest,
+    pub parents: Vec<Digest>,
     pub author: Bytestring,
     pub author_timestamp: i64,
     pub author_timestamp_offset: Bytestring,
@@ -24,7 +25,7 @@ impl Revision {
         let manifest = rev_manifest(self);
         let digest = crate::hash::hash_swhid_object("commit", &manifest);
 
-        Swhid::new(crate::ObjectType::Revision, digest)
+        Swhid::new_v1(crate::ObjectType::Revision, digest)
     }
 }
 
@@ -42,10 +43,10 @@ pub fn rev_manifest(rev: &Revision) -> Vec<u8> {
         message,
     } = rev;
     let mut writer = HeaderWriter::default();
-    writer.push(b"tree", hex::encode(directory));
+    writer.push(b"tree", hex::encode(directory.as_bytes()));
 
     for parent in parents {
-        writer.push(b"parent", hex::encode(parent));
+        writer.push(b"parent", hex::encode(parent.as_bytes()));
     }
 
     writer.push_authorship(

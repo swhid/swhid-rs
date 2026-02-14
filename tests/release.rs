@@ -1,3 +1,4 @@
+use swhid::digest::Digest;
 use swhid::release::*;
 
 fn bs(s: &'static str) -> Box<[u8]> {
@@ -6,13 +7,13 @@ fn bs(s: &'static str) -> Box<[u8]> {
 
 #[test]
 fn simple_rel_hash() {
-    let tree_hash = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+    let tree_hash: [u8; 20] = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
         .unwrap()
         .try_into()
         .unwrap();
 
     let rel = Release {
-        object: tree_hash,
+        object: Digest::from(tree_hash),
         object_type: ReleaseTargetType::Directory,
         name: bs("v1.0"),
         author: Some(bs("Test User <test@example.com>")),

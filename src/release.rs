@@ -1,3 +1,4 @@
+use crate::digest::Digest;
 use crate::utils::HeaderWriter;
 use crate::{Bytestring, Swhid};
 
@@ -11,7 +12,7 @@ pub enum ReleaseTargetType {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Release {
-    pub object: [u8; 20],
+    pub object: Digest,
     pub object_type: ReleaseTargetType,
     pub name: Bytestring,
     pub author: Option<Bytestring>,
@@ -30,7 +31,7 @@ impl Release {
         let manifest = rel_manifest(self);
         let digest = crate::hash::hash_swhid_object("tag", &manifest);
 
-        Swhid::new(crate::ObjectType::Release, digest)
+        Swhid::new_v1(crate::ObjectType::Release, digest)
     }
 }
 
@@ -47,7 +48,7 @@ pub fn rel_manifest(rev: &Release) -> Vec<u8> {
     } = rev;
     let mut writer = HeaderWriter::default();
 
-    writer.push(b"object", hex::encode(object));
+    writer.push(b"object", hex::encode(object.as_bytes()));
     writer.push(
         b"type",
         match object_type {

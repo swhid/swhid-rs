@@ -4,7 +4,7 @@
 use crate::error::SwhidError;
 
 /// Digest bytes for a SWHID; variant depends on the hash algorithm.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Digest {
     #[cfg(feature = "sha1")]
     Sha1([u8; 20]),

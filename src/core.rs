@@ -1,7 +1,9 @@
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
+use crate::digest::Digest;
 use crate::error::SwhidError;
+use crate::types::SwhidVersion;
 
 /// Known SWH object kinds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -41,32 +43,48 @@ impl ObjectType {
     }
 }
 
-/// A core SWHID: `swh:1:<tag>:<hex-digest>`
+/// A core SWHID: `swh:<version>:<tag>:<digest>` (digest encoding depends on version).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Swhid {
     object_type: ObjectType,
-    /// Lowercase hex sha1 digest (20 bytes -> 40 hex chars)
-    digest: [u8; 20],
+    digest: Digest,
+    version: SwhidVersion,
 }
 
 impl Swhid {
     pub const VERSION: &'static str = "1";
 
-    pub fn new(object_type: ObjectType, digest: [u8; 20]) -> Self {
+    pub fn new(object_type: ObjectType, digest: Digest, version: SwhidVersion) -> Self {
         Self {
             object_type,
             digest,
+            version,
         }
     }
+
+    /// V1 SWHID from 20-byte digest (backward compat).
+    pub fn new_v1(object_type: ObjectType, digest: [u8; 20]) -> Self {
+        Self::new(object_type, Digest::from(digest), SwhidVersion::V1)
+    }
+
     pub fn object_type(&self) -> ObjectType {
         self.object_type
     }
-    pub fn digest_bytes(&self) -> &[u8; 20] {
+
+    pub fn digest(&self) -> &Digest {
         &self.digest
     }
 
+    pub fn digest_bytes(&self) -> &[u8] {
+        self.digest.as_bytes()
+    }
+
     pub fn digest_hex(&self) -> String {
-        hex::encode(self.digest)
+        hex::encode(self.digest.as_bytes())
+    }
+
+    pub fn version(&self) -> SwhidVersion {
+        self.version
     }
 }
 
@@ -75,7 +93,7 @@ impl Display for Swhid {
         write!(
             f,
             "swh:{}:{}:{}",
-            Self::VERSION,
+            self.version.as_str(),
             self.object_type.as_tag(),
             self.digest_hex()
         )
@@ -86,7 +104,6 @@ impl FromStr for Swhid {
     type Err = SwhidError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Expect: swh:1:<tag>:<digest-hex>
         let mut it = s.split(':');
         let scheme = it
             .next()
@@ -97,9 +114,11 @@ impl FromStr for Swhid {
         let ver = it
             .next()
             .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
-        if ver != Self::VERSION {
-            return Err(SwhidError::InvalidVersion(ver.to_owned()));
-        }
+        let version = match ver {
+            "1" => SwhidVersion::V1,
+            "2" => SwhidVersion::V2,
+            _ => return Err(SwhidError::InvalidVersion(ver.to_owned())),
+        };
         let tag = it
             .next()
             .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
@@ -109,20 +128,19 @@ impl FromStr for Swhid {
             .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
 
         if it.next().is_some() {
-            // too many parts
             return Err(SwhidError::InvalidFormat(s.to_owned()));
         }
-        if digest_hex.len() != 40
+        if digest_hex.is_empty()
             || !digest_hex
                 .bytes()
-                .all(|b| matches!(b, b'0'..=b'9'|b'a'..=b'f'))
+                .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
         {
             return Err(SwhidError::InvalidDigest(digest_hex.to_owned()));
         }
-        let mut raw = [0u8; 20];
-        hex::decode_to_slice(digest_hex, &mut raw)
-            .map_err(|_| SwhidError::InvalidDigest(digest_hex.to_owned()))?;
-        Ok(Swhid::new(object_type, raw))
+        let raw =
+            hex::decode(digest_hex).map_err(|_| SwhidError::InvalidDigest(digest_hex.to_owned()))?;
+        let digest = Digest::from_bytes(raw)?;
+        Ok(Swhid::new(object_type, digest, version))
     }
 }
 
@@ -237,9 +255,9 @@ mod tests {
     #[test]
     fn swhid_new() {
         let digest = [0u8; 20];
-        let swhid = Swhid::new(ObjectType::Content, digest);
+        let swhid = Swhid::new_v1(ObjectType::Content, digest);
         assert_eq!(swhid.object_type(), ObjectType::Content);
-        assert_eq!(swhid.digest_bytes(), &digest);
+        assert_eq!(swhid.digest_bytes(), digest.as_slice());
     }
 
     #[test]
@@ -253,7 +271,7 @@ mod tests {
             0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
             0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
         ];
-        let swhid = Swhid::new(ObjectType::Content, digest);
+        let swhid = Swhid::new_v1(ObjectType::Content, digest);
         assert_eq!(
             swhid.digest_hex(),
             "123456789abcdef0112233445566778899aabbcc"
@@ -266,7 +284,7 @@ mod tests {
             0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
             0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
         ];
-        let swhid = Swhid::new(ObjectType::Content, digest);
+        let swhid = Swhid::new_v1(ObjectType::Content, digest);
         assert_eq!(
             swhid.to_string(),
             "swh:1:cnt:123456789abcdef0112233445566778899aabbcc"
@@ -280,11 +298,11 @@ mod tests {
             0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
         ];
 
-        let content = Swhid::new(ObjectType::Content, digest);
-        let directory = Swhid::new(ObjectType::Directory, digest);
-        let revision = Swhid::new(ObjectType::Revision, digest);
-        let release = Swhid::new(ObjectType::Release, digest);
-        let snapshot = Swhid::new(ObjectType::Snapshot, digest);
+        let content = Swhid::new_v1(ObjectType::Content, digest);
+        let directory = Swhid::new_v1(ObjectType::Directory, digest);
+        let revision = Swhid::new_v1(ObjectType::Revision, digest);
+        let release = Swhid::new_v1(ObjectType::Release, digest);
+        let snapshot = Swhid::new_v1(ObjectType::Snapshot, digest);
 
         assert_eq!(
             content.to_string(),
@@ -357,10 +375,10 @@ mod tests {
 
     #[test]
     fn swhid_parse_invalid_version() {
-        assert!("swh:2:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+        assert!("swh:0:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
             .parse::<Swhid>()
             .is_err());
-        assert!("swh:0:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+        assert!("swh:3:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
             .parse::<Swhid>()
             .is_err());
     }
@@ -379,10 +397,11 @@ mod tests {
     fn swhid_parse_invalid_digest_length() {
         assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c539"
             .parse::<Swhid>()
-            .is_err()); // too short
-        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391a"
+            .is_err()); // too short (odd length)
+        // 42 hex chars = 21 bytes, not a supported digest length
+        assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391ab"
             .parse::<Swhid>()
-            .is_err()); // too long
+            .is_err());
     }
 
     #[test]
@@ -431,10 +450,10 @@ mod tests {
             0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCD,
         ];
 
-        let swhid1 = Swhid::new(ObjectType::Content, digest1);
-        let swhid2 = Swhid::new(ObjectType::Content, digest1);
-        let swhid3 = Swhid::new(ObjectType::Content, digest2);
-        let swhid4 = Swhid::new(ObjectType::Directory, digest1);
+        let swhid1 = Swhid::new_v1(ObjectType::Content, digest1);
+        let swhid2 = Swhid::new_v1(ObjectType::Content, digest1);
+        let swhid3 = Swhid::new_v1(ObjectType::Content, digest2);
+        let swhid4 = Swhid::new_v1(ObjectType::Directory, digest1);
 
         assert_eq!(swhid1, swhid2);
         assert_ne!(swhid1, swhid3);
@@ -449,7 +468,7 @@ mod tests {
             0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
             0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
         ];
-        let swhid = Swhid::new(ObjectType::Content, digest);
+        let swhid = Swhid::new_v1(ObjectType::Content, digest);
         map.insert(swhid.clone(), "content");
         assert_eq!(map.get(&swhid), Some(&"content"));
     }
@@ -460,7 +479,7 @@ mod tests {
             0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
             0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
         ];
-        let swhid1 = Swhid::new(ObjectType::Content, digest);
+        let swhid1 = Swhid::new_v1(ObjectType::Content, digest);
         let swhid2 = swhid1.clone();
         assert_eq!(swhid1, swhid2);
     }
@@ -471,7 +490,7 @@ mod tests {
             0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
             0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC,
         ];
-        let swhid = Swhid::new(ObjectType::Content, digest);
+        let swhid = Swhid::new_v1(ObjectType::Content, digest);
         let debug_str = format!("{swhid:?}");
         assert!(debug_str.contains("Swhid"));
         assert!(debug_str.contains("Content"));

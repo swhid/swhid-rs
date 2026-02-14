@@ -5,6 +5,7 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::core::{ObjectType, Swhid};
+use crate::digest::Digest;
 use crate::error::DirectoryError;
 use crate::hash::{hash_content, hash_swhid_object};
 use crate::permissions::{
@@ -59,12 +60,16 @@ pub struct Entry {
     /// SWHID v1.2 tree mode (compatible with Git tree mode)
     mode: u32,
     /// SWHID object id
-    id: [u8; 20],
+    id: Digest,
 }
 
 impl Entry {
-    pub fn new(name: Box<[u8]>, mode: u32, id: [u8; 20]) -> Entry {
+    pub fn new(name: Box<[u8]>, mode: u32, id: Digest) -> Entry {
         Self { name, mode, id }
+    }
+
+    pub fn id(&self) -> &Digest {
+        &self.id
     }
 
     fn is_dir(&self) -> bool {
@@ -84,17 +89,19 @@ impl Entry {
 
 impl From<ManifestEntry> for Entry {
     fn from(manifest: ManifestEntry) -> Self {
-        // Convert Vec<u8> to [u8; 20] for v1 compatibility
-        let id_array: [u8; 20] = manifest.target.try_into().unwrap_or_else(|v: Vec<u8>| {
-            let mut arr = [0u8; 20];
-            let len = v.len().min(20);
-            arr[..len].copy_from_slice(&v[..len]);
-            arr
-        });
+        let id = match Digest::from_bytes(manifest.target.clone()) {
+            Ok(d) => d,
+            Err(_) => {
+                let mut arr = [0u8; 20];
+                let len = manifest.target.len().min(20);
+                arr[..len].copy_from_slice(&manifest.target[..len]);
+                Digest::from(arr)
+            }
+        };
         Entry {
             name: manifest.name.into_boxed_slice(),
             mode: manifest.perms.to_swh_mode_u32(),
-            id: id_array,
+            id,
         }
     }
 }
@@ -128,7 +135,7 @@ fn dir_manifest_unchecked(children: &[Entry]) -> Vec<u8> {
         out.push(b' ');
         out.extend_from_slice(&e.name);
         out.push(0);
-        out.extend_from_slice(&e.id);
+        out.extend_from_slice(e.id.as_bytes());
     }
     out
 }
@@ -259,7 +266,7 @@ fn read_dir(
                     e
                 )))
             })?;
-            let id = hash_swhid_object("tree", &manifest);
+            let id = Digest::from(hash_swhid_object("tree", &manifest));
             children.push(Entry {
                 name: name_bytes,
                 mode: 0o040000,
@@ -275,7 +282,7 @@ fn read_dir(
                 )))
             })?;
             let bytes = target.as_os_str().as_encoded_bytes();
-            let id = hash_content(bytes);
+            let id = Digest::from(hash_content(bytes));
             children.push(Entry {
                 name: name_bytes,
                 mode: symlink_mode(),
@@ -289,7 +296,7 @@ fn read_dir(
                     e
                 )))
             })?;
-            let id = hash_content(&bytes);
+            let id = Digest::from(hash_content(&bytes));
 
             // Use permission source to determine executable bit
             let exec = permission_source.executable_of(&entry.path())?;
@@ -347,7 +354,7 @@ impl Directory {
     /// is compatible with Git's tree format for directory objects.
     pub fn swhid(&self) -> Result<Swhid, crate::error::SwhidError> {
         let manifest = dir_manifest_unchecked(&self.entries);
-        Ok(Swhid::new(
+        Ok(Swhid::new_v1(
             ObjectType::Directory,
             hash_swhid_object("tree", &manifest),
         ))
