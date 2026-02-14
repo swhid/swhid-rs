@@ -9,7 +9,19 @@ keywords = ["swhid", "iso18670", "software-heritage", "identifier", "hash"]
 categories = ["encoding", "data-structures", "parsing"]
 
 [features]
-default = []
+default = ["sha1", "sha256", "encoding-hex", "encoding-base64url"]
+# Hashes (at least one required)
+sha1 = ["dep:sha1collisiondetection"]
+sha256 = ["dep:sha2"]
+sha512 = ["dep:sha2"]
+# Encodings
+encoding-hex = []
+encoding-base64 = ["dep:base64"]
+encoding-base64url = ["dep:base64"]
+encoding-base32 = ["dep:data-encoding"]
+encoding-base32hex = ["dep:data-encoding"]
+encoding-z85 = []
+# Existing
 serde = ["dep:serde"]
 git = ["dep:git2"]
 
@@ -19,8 +31,11 @@ thiserror = "1"
 percent-encoding = "2"
 serde = { version = "1", features = ["derive"], optional = true }
 clap = { version = "4", features = ["derive"] }
-sha1collisiondetection = { version = "0.3" }
+sha1collisiondetection = { version = "0.3", optional = true }
+sha2 = { version = "0.10", optional = true }
 git2 = { version = "0.20", optional = true }
+base64 = { version = "0.22", optional = true }
+data-encoding = { version = "2.5", optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

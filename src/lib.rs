@@ -1,7 +1,11 @@
 #![doc = include_str!("../README.md")]
 
+#[cfg(not(any(feature = "sha1", feature = "sha256", feature = "sha512")))]
+compile_error!("At least one of sha1, sha256, sha512 must be enabled.");
+
 pub mod content;
 pub mod core;
+pub mod digest;
 pub mod directory;
 pub mod error;
 #[cfg(feature = "git")]
@@ -16,6 +20,7 @@ mod utils;
 
 pub use content::Content;
 pub use core::{ObjectType, Swhid};
+pub use digest::Digest;
 pub use directory::{Directory, DiskDirectoryBuilder, Entry, WalkOptions};
 pub use directory::{DirectoryBuildOptions, ManifestEntry};
 pub use permissions::{
