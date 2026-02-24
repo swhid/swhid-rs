@@ -1,6 +1,10 @@
-# swhid-rs: SWHID v1.2 reference implementation
+# swhid-rs: SWHID v1.2 reference and v2 exploration implementation
 
-This crate provides a minimal implementation of the SWHID (SoftWare Hash IDentifier) format as defined in **ISO/IEC 18670:2025** and detailed in the SWHID v1.2 specification;
+This crate provides a minimal implementation of the SWHID (SoftWare Hash IDentifier) format as defined in **ISO/IEC 18670:2025** and detailed in the SWHID v1.2 specification.
+
+## Exploration status
+
+> **Note on versioning:** This branch (`v2-typespecialisation`) is an experimental refactor of the swhid-rs library. It explores the transition from the SHA1-only model of SWHID v1 to the modular architecture required for SWHID v2 (ISO 18670). It is not the current stable reference for v1; for that, please refer to the `main` branch. This branch is suitable for v2-alpha testing.
 
 This implementation is **fully compliant** with SWHID v1.2 and provides:
 
@@ -14,12 +18,28 @@ VCS Integration (optional):
 - Computing `rev`, `rel`, `snp` SWHIDs from VCS metadata (requires `git` feature)
 - Git repository support for revision, release, and snapshot SWHID computation
 
+## Technical highlights
+
+- **Modular hashing:** Multiple hash algorithms (SHA-1, SHA-256, SHA-512) via `HashFunction` trait and `HashConfig<H, E>`.
+- **Type-level specialization:** Hash and encoder are fixed at compile time; no runtime dispatch; zero-cost abstraction.
+- **Config-based pipeline:** `swhid_with_config(&config)` on Content, Directory, Revision, Release, Snapshot; `HashConfig::v1()`, `HashConfig::v2()`, etc.
+- **Feature-gated builds:** Cargo features select which hashes and encodings are compiled (e.g. `sha1`, `sha256`, `encoding-hex`, `encoding-base64url`).
+
 ## Features
 
 | Feature | Description |
 |---------|-------------|
+| `sha1` | SHA-1 hash (default) |
+| `sha256` | SHA-256 hash |
+| `sha512` | SHA-512 hash |
+| `encoding-hex` | Hex encoding (default) |
+| `encoding-base64` | Base64 encoding |
+| `encoding-base64url` | Base64url encoding |
+| `encoding-base32` | Base32 encoding (RFC 4648) |
+| `encoding-base32hex` | Base32hex encoding |
+| `encoding-z85` | Z85 encoding (ZeroMQ Base85) |
+| `git` | VCS integration for SWHID v1.2 revision/release/snapshot computation |
 | `serde` | Enable `Serialize`/`Deserialize` for all public types |
-| `git` | Enable VCS integration for SWHID v1.2 revision/release/snapshot computation |
 
 ## Installing the CLI
 - **Install (Rust):** `cargo install swhid` (add `--features git` for VCS commands).
@@ -56,6 +76,21 @@ let swhid = dir.swhid()?;
 println!("Directory SWHID: {}", swhid);
 
 # Ok::<_, Box<dyn std::error::Error>>(())
+```
+
+### Creating a SWHID with config (v2)
+
+```rust,no_run
+use swhid::{Content, HashConfig};
+
+// V2 (SHA-256 + base64url) - requires sha256 and encoding-base64url features
+#[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
+{
+    let config = HashConfig::v2();
+    let content = Content::from_bytes(b"Hello, World!");
+    let swhid = content.swhid_with_config(&config);
+    println!("V2 SWHID: {}", swhid.to_string_encoded(&config.encoder));
+}
 ```
 
 ### Creating a qualified SWHID
@@ -108,6 +143,10 @@ use std::path::PathBuf;
 # Content SWHIDs
 swhid content --file README.md
 echo "Hello, World!" | swhid content
+
+# Hash and format options (v1 and v2)
+swhid content --hash sha1 --format hex --file README.md      # v1
+swhid content --hash sha256 --format base64url --file README.md  # v2
 
 # Directory SWHIDs
 swhid dir .

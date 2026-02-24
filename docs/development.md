@@ -47,4 +47,20 @@ CI (`.github/workflows/rust.yml`) runs format check, clippy, and tests with defa
 
 ## Branch `v2-typespecialisation`
 
-The branch introduces type-level hash and encoding (no runtime dispatch): `Digest` enum, `HashConfig<H, E>`, and `swhid_with_config` across content, directory, revision, release, snapshot, and git. Default behaviour remains v1 (SHA-1 + hex). Progress is tracked in `implementationHE.md` (untracked).
+The branch introduces type-level hash and encoding (no runtime dispatch): `Digest` enum, `HashConfig<H, E>`, and `swhid_with_config` across content, directory, revision, release, snapshot, and git. Default behaviour remains v1 (SHA-1 + hex).
+
+### Architecture summary
+
+- **Type-level H and E:** Hash and encoder are fixed at the call site via `HashConfig<H, E>`. No `dyn`; no runtime branch on hash or encoding in the hot path.
+- **Monomorphization:** One monomorphization per `(H, E)` pair actually used. The pipeline (content, directory, revision, release, snapshot, git) is generic over `H` and `E`.
+- **Zero-cost abstraction:** The compiler specializes each config combination at compile time; there is no runtime overhead compared to hand-written per-hash code.
+
+### Technical highlights
+
+- **Modular hashing:** Multiple hash algorithms (SHA-1, SHA-256, SHA-512) via `HashFunction` trait and `HashConfig<H, E>`.
+- **Config-based pipeline:** `swhid_with_config(&config)` on Content, Directory, Revision, Release, Snapshot; `HashConfig::v1()`, `HashConfig::v2()`, etc.
+- **Feature-gated builds:** Cargo features select which hashes and encodings are compiled.
+
+### Contributor note
+
+The trait-heavy design may require more upfront understanding. Inline documentation in `config.rs`, `hash/mod.rs`, and `content.rs` helps.
