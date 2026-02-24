@@ -7,8 +7,8 @@ This document describes how to work on the `swhid-rs` codebase: layout, testing,
 - **`src/core.rs`** — `ObjectType`, `Swhid` (core identifier), `FromStr`/`Display`, `to_string_encoded`.
 - **`src/digest.rs`** — `Digest` enum (Sha1/Sha256/Sha512, feature-gated), `as_bytes`, `from_bytes`, `From<[u8; N]>`.
 - **`src/types.rs`** — `SwhidVersion` (V1, V2).
-- **`src/config.rs`** — `HashConfig<H, E>`, `v1()` / `v2()` (feature-gated).
-- **`src/serialization/`** — `DigestSerializer`, `HexSerializer`, `Base64UrlSerializer`, etc.
+- **`src/config.rs`** — `HashConfig<H, E>`, `v1()`, `v2()`, `v2_hex()`, `v2_base64()`, `v2_base32()`, `v2_base32hex()`, `v2_z85()`, `sha512_hex()`, `sha512_base64url()` (feature-gated).
+- **`src/serialization/`** — `DigestSerializer`, `HexSerializer`, `Base64Serializer`, `Base64UrlSerializer`, `Base32Serializer`, `Base32HexSerializer`, `Z85Serializer`.
 - **`src/hash/`** — `HashFunction` trait, `swhid_object_header`, per-hash modules (`sha1`, `sha256`, `sha512`).
 - **`src/content.rs`** — `Content`, `swhid()` / `swhid_with_config()`.
 - **`src/directory.rs`** — `Entry`, `Directory`, `DiskDirectoryBuilder`, `dir_manifest`, `swhid()` / `swhid_with_config()`.
