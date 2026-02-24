@@ -16,7 +16,11 @@ use swhid::git;
 #[command(name = "swhid")]
 #[command(about = "Compute and parse SWHIDs (ISO/IEC 18670)")]
 #[command(version)]
+#[command(disable_version_flag = true)]
 struct Cli {
+    /// SWHID version (1 or 2). Accepted for harness compatibility; use --hash and --format instead.
+    #[arg(long, global = true, value_name = "VERSION")]
+    version: Option<u8>,
     /// Hash algorithm (sha1, sha256, sha512). Requires matching feature. Default: sha1.
     #[arg(long, global = true, value_name = "HASH")]
     hash: Option<String>,
