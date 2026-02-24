@@ -390,6 +390,55 @@ fn test_snapshot_swhid() {
     );
 }
 
+/// SHA-256 repository: revision SWHID is computed when repo uses objectFormat=sha256.
+/// Ignored: libgit2 does not yet support SHA-256 repos (unknown object format 'sha256').
+#[test]
+#[ignore]
+fn test_revision_swhid_sha256_repo() {
+    let tmp = assert_fs::TempDir::new().unwrap();
+    // Create SHA-256 repo via git CLI (git 2.29+)
+    let status = std::process::Command::new("git")
+        .args(["init", "--object-format=sha256"])
+        .current_dir(tmp.path())
+        .status()
+        .unwrap();
+    if !status.success() {
+        eprintln!("git init --object-format=sha256 not supported, skipping test");
+        return;
+    }
+    let repo = git2::Repository::open(tmp.path()).unwrap();
+    // Verify OIDs are 32 bytes
+    let mut index = repo.index().unwrap();
+    let file_path = tmp.child("f.txt");
+    file_path.write_str("x").unwrap();
+    index
+        .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
+        .unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    assert_eq!(tree_oid.as_bytes().len(), 32, "expected 32-byte OID in SHA-256 repo");
+    let tree = repo.find_tree(tree_oid).unwrap();
+    let sig = git2::Signature::new(
+        "U",
+        "u@x",
+        &git2::Time::new(1763027354, 60),
+    )
+    .unwrap();
+    let commit_oid = repo
+        .commit(
+            Some("refs/heads/main"),
+            &sig,
+            &sig,
+            "commit",
+            &tree,
+            &[],
+        )
+        .unwrap();
+    assert_eq!(commit_oid.as_bytes().len(), 32);
+    let swhid = revision_swhid(&repo, &commit_oid).unwrap();
+    assert!(swhid.to_string().starts_with("swh:1:rev:"));
+    assert_eq!(swhid.digest_bytes().len(), 20); // SWHID v1 digest is always 20 bytes (SHA1)
+}
+
 /// Snapshot with a dangling branch (ref pointing to a missing object) is computed successfully;
 /// the dangling branch is included with empty target per SWHID v1.2 Clause 5.6.
 #[test]
