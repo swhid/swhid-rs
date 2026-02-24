@@ -17,10 +17,10 @@ use swhid::git;
 #[command(about = "Compute and parse SWHIDs (ISO/IEC 18670)")]
 #[command(version)]
 struct Cli {
-    /// Hash algorithm (sha1, sha256). Requires matching feature. Default: sha1.
+    /// Hash algorithm (sha1, sha256, sha512). Requires matching feature. Default: sha1.
     #[arg(long, global = true, value_name = "HASH")]
     hash: Option<String>,
-    /// Digest encoding (hex, base64url). Requires matching feature. Default: hex.
+    /// Digest encoding (hex, base64, base64url, base32, base32hex, z85). Requires matching feature. Default: hex.
     #[arg(long, global = true, value_name = "FORMAT")]
     format: Option<String>,
     #[command(subcommand)]
@@ -119,6 +119,16 @@ enum GitCommand {
     },
 }
 
+/// Build a helpful error for unsupported hash/format combinations.
+fn hash_format_error(hash: Option<&str>, format: Option<&str>) -> String {
+    let (h, f) = (hash.unwrap_or("(default)"), format.unwrap_or("(default)"));
+    format!(
+        "unsupported --hash/--format (hash={h}, format={f}). \
+        Supported combinations (require matching features): \
+        sha1+hex, sha256+hex, sha256+base64, sha256+base64url, sha256+base32, sha256+base32hex, sha256+z85, sha512+hex, sha512+base64url"
+    )
+}
+
 /// Compute content SWHID string; when hash/format are set use that config.
 fn content_swhid_string(
     bytes: Vec<u8>,
@@ -135,7 +145,27 @@ fn content_swhid_string(
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
-            Err("sha1/hex not enabled (compile with default or sha1 and encoding-hex)".into())
+            Err("sha1/hex not enabled (compile with sha1 and encoding-hex)".into())
+        }
+        (Some("sha256"), Some("hex")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::v2_hex();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-hex")))]
+            Err("sha256/hex not enabled (compile with sha256 and encoding-hex)".into())
+        }
+        (Some("sha256"), Some("base64")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base64"))]
+            {
+                let config = HashConfig::v2_base64();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base64")))]
+            Err("sha256/base64 not enabled (compile with sha256 and encoding-base64)".into())
         }
         (Some("sha256"), Some("base64url")) => {
             #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
@@ -147,7 +177,57 @@ fn content_swhid_string(
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
             Err("sha256/base64url not enabled (compile with sha256 and encoding-base64url)".into())
         }
-        _ => Err("unsupported --hash/--format; use e.g. --hash sha1 --format hex or --hash sha256 --format base64url".into()),
+        (Some("sha256"), Some("base32")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base32"))]
+            {
+                let config = HashConfig::v2_base32();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base32")))]
+            Err("sha256/base32 not enabled (compile with sha256 and encoding-base32)".into())
+        }
+        (Some("sha256"), Some("base32hex")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base32hex"))]
+            {
+                let config = HashConfig::v2_base32hex();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base32hex")))]
+            Err("sha256/base32hex not enabled (compile with sha256 and encoding-base32hex)".into())
+        }
+        (Some("sha256"), Some("z85")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-z85"))]
+            {
+                let config = HashConfig::v2_z85();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-z85")))]
+            Err("sha256/z85 not enabled (compile with sha256 and encoding-z85)".into())
+        }
+        (Some("sha512"), Some("hex")) => {
+            #[cfg(all(feature = "sha512", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::sha512_hex();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha512", feature = "encoding-hex")))]
+            Err("sha512/hex not enabled (compile with sha512 and encoding-hex)".into())
+        }
+        (Some("sha512"), Some("base64url")) => {
+            #[cfg(all(feature = "sha512", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::sha512_base64url();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
+            Err("sha512/base64url not enabled (compile with sha512 and encoding-base64url)".into())
+        }
+        _ => Err(hash_format_error(hash, format).into()),
     }
 }
 
@@ -169,6 +249,26 @@ fn dir_swhid_string(
             #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
             Err("sha1/hex not enabled".into())
         }
+        (Some("sha256"), Some("hex")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::v2_hex();
+                let swhid = dir.swhid_with_config(&config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-hex")))]
+            Err("sha256/hex not enabled".into())
+        }
+        (Some("sha256"), Some("base64")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base64"))]
+            {
+                let config = HashConfig::v2_base64();
+                let swhid = dir.swhid_with_config(&config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base64")))]
+            Err("sha256/base64 not enabled".into())
+        }
         (Some("sha256"), Some("base64url")) => {
             #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
             {
@@ -179,7 +279,57 @@ fn dir_swhid_string(
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
             Err("sha256/base64url not enabled".into())
         }
-        _ => Err("unsupported --hash/--format".into()),
+        (Some("sha256"), Some("base32")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base32"))]
+            {
+                let config = HashConfig::v2_base32();
+                let swhid = dir.swhid_with_config(&config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base32")))]
+            Err("sha256/base32 not enabled".into())
+        }
+        (Some("sha256"), Some("base32hex")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base32hex"))]
+            {
+                let config = HashConfig::v2_base32hex();
+                let swhid = dir.swhid_with_config(&config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base32hex")))]
+            Err("sha256/base32hex not enabled".into())
+        }
+        (Some("sha256"), Some("z85")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-z85"))]
+            {
+                let config = HashConfig::v2_z85();
+                let swhid = dir.swhid_with_config(&config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-z85")))]
+            Err("sha256/z85 not enabled".into())
+        }
+        (Some("sha512"), Some("hex")) => {
+            #[cfg(all(feature = "sha512", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::sha512_hex();
+                let swhid = dir.swhid_with_config(&config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha512", feature = "encoding-hex")))]
+            Err("sha512/hex not enabled".into())
+        }
+        (Some("sha512"), Some("base64url")) => {
+            #[cfg(all(feature = "sha512", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::sha512_base64url();
+                let swhid = dir.swhid_with_config(&config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
+            Err("sha512/base64url not enabled".into())
+        }
+        _ => Err(hash_format_error(hash, format).into()),
     }
 }
 
@@ -207,6 +357,28 @@ fn git_revision_swhid_string(
             #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
             Err("sha1/hex not enabled".into())
         }
+        (Some("sha256"), Some("hex")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::v2_hex();
+                let swhid =
+                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-hex")))]
+            Err("sha256/hex not enabled".into())
+        }
+        (Some("sha256"), Some("base64")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base64"))]
+            {
+                let config = HashConfig::v2_base64();
+                let swhid =
+                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base64")))]
+            Err("sha256/base64 not enabled".into())
+        }
         (Some("sha256"), Some("base64url")) => {
             #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
             {
@@ -218,7 +390,62 @@ fn git_revision_swhid_string(
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
             Err("sha256/base64url not enabled".into())
         }
-        _ => Err("unsupported --hash/--format for git".into()),
+        (Some("sha256"), Some("base32")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base32"))]
+            {
+                let config = HashConfig::v2_base32();
+                let swhid =
+                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base32")))]
+            Err("sha256/base32 not enabled".into())
+        }
+        (Some("sha256"), Some("base32hex")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base32hex"))]
+            {
+                let config = HashConfig::v2_base32hex();
+                let swhid =
+                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base32hex")))]
+            Err("sha256/base32hex not enabled".into())
+        }
+        (Some("sha256"), Some("z85")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-z85"))]
+            {
+                let config = HashConfig::v2_z85();
+                let swhid =
+                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-z85")))]
+            Err("sha256/z85 not enabled".into())
+        }
+        (Some("sha512"), Some("hex")) => {
+            #[cfg(all(feature = "sha512", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::sha512_hex();
+                let swhid =
+                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha512", feature = "encoding-hex")))]
+            Err("sha512/hex not enabled".into())
+        }
+        (Some("sha512"), Some("base64url")) => {
+            #[cfg(all(feature = "sha512", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::sha512_base64url();
+                let swhid =
+                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
+            Err("sha512/base64url not enabled".into())
+        }
+        _ => Err(hash_format_error(hash, format).into()),
     }
 }
 
@@ -241,6 +468,26 @@ fn git_release_swhid_string(
             #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
             Err("sha1/hex not enabled".into())
         }
+        (Some("sha256"), Some("hex")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::v2_hex();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-hex")))]
+            Err("sha256/hex not enabled".into())
+        }
+        (Some("sha256"), Some("base64")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base64"))]
+            {
+                let config = HashConfig::v2_base64();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base64")))]
+            Err("sha256/base64 not enabled".into())
+        }
         (Some("sha256"), Some("base64url")) => {
             #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
             {
@@ -251,7 +498,57 @@ fn git_release_swhid_string(
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
             Err("sha256/base64url not enabled".into())
         }
-        _ => Err("unsupported --hash/--format for git".into()),
+        (Some("sha256"), Some("base32")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base32"))]
+            {
+                let config = HashConfig::v2_base32();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base32")))]
+            Err("sha256/base32 not enabled".into())
+        }
+        (Some("sha256"), Some("base32hex")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base32hex"))]
+            {
+                let config = HashConfig::v2_base32hex();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base32hex")))]
+            Err("sha256/base32hex not enabled".into())
+        }
+        (Some("sha256"), Some("z85")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-z85"))]
+            {
+                let config = HashConfig::v2_z85();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-z85")))]
+            Err("sha256/z85 not enabled".into())
+        }
+        (Some("sha512"), Some("hex")) => {
+            #[cfg(all(feature = "sha512", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::sha512_hex();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha512", feature = "encoding-hex")))]
+            Err("sha512/hex not enabled".into())
+        }
+        (Some("sha512"), Some("base64url")) => {
+            #[cfg(all(feature = "sha512", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::sha512_base64url();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
+            Err("sha512/base64url not enabled".into())
+        }
+        _ => Err(hash_format_error(hash, format).into()),
     }
 }
 
@@ -273,6 +570,26 @@ fn git_snapshot_swhid_string(
             #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
             Err("sha1/hex not enabled".into())
         }
+        (Some("sha256"), Some("hex")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::v2_hex();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-hex")))]
+            Err("sha256/hex not enabled".into())
+        }
+        (Some("sha256"), Some("base64")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base64"))]
+            {
+                let config = HashConfig::v2_base64();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base64")))]
+            Err("sha256/base64 not enabled".into())
+        }
         (Some("sha256"), Some("base64url")) => {
             #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
             {
@@ -283,7 +600,57 @@ fn git_snapshot_swhid_string(
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
             Err("sha256/base64url not enabled".into())
         }
-        _ => Err("unsupported --hash/--format for git".into()),
+        (Some("sha256"), Some("base32")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base32"))]
+            {
+                let config = HashConfig::v2_base32();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base32")))]
+            Err("sha256/base32 not enabled".into())
+        }
+        (Some("sha256"), Some("base32hex")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-base32hex"))]
+            {
+                let config = HashConfig::v2_base32hex();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-base32hex")))]
+            Err("sha256/base32hex not enabled".into())
+        }
+        (Some("sha256"), Some("z85")) => {
+            #[cfg(all(feature = "sha256", feature = "encoding-z85"))]
+            {
+                let config = HashConfig::v2_z85();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha256", feature = "encoding-z85")))]
+            Err("sha256/z85 not enabled".into())
+        }
+        (Some("sha512"), Some("hex")) => {
+            #[cfg(all(feature = "sha512", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::sha512_hex();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha512", feature = "encoding-hex")))]
+            Err("sha512/hex not enabled".into())
+        }
+        (Some("sha512"), Some("base64url")) => {
+            #[cfg(all(feature = "sha512", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::sha512_base64url();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
+            Err("sha512/base64url not enabled".into())
+        }
+        _ => Err(hash_format_error(hash, format).into()),
     }
 }
 
