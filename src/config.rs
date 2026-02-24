@@ -51,3 +51,137 @@ impl HashConfig<crate::hash::Sha256Hash, crate::serialization::Base64UrlSerializ
         )
     }
 }
+
+#[cfg(all(feature = "sha256", feature = "encoding-hex"))]
+impl HashConfig<crate::hash::Sha256Hash, crate::serialization::HexSerializer> {
+    /// V2 config: SHA-256 + hex.
+    pub fn v2_hex() -> Self {
+        Self::new(
+            crate::hash::Sha256Hash,
+            crate::serialization::HexSerializer,
+            SwhidVersion::V2,
+        )
+    }
+}
+
+#[cfg(all(feature = "sha256", feature = "encoding-base64"))]
+impl HashConfig<crate::hash::Sha256Hash, crate::serialization::Base64Serializer> {
+    /// V2 config: SHA-256 + base64.
+    pub fn v2_base64() -> Self {
+        Self::new(
+            crate::hash::Sha256Hash,
+            crate::serialization::Base64Serializer,
+            SwhidVersion::V2,
+        )
+    }
+}
+
+#[cfg(all(feature = "sha256", feature = "encoding-base32"))]
+impl HashConfig<crate::hash::Sha256Hash, crate::serialization::Base32Serializer> {
+    /// V2 config: SHA-256 + base32.
+    pub fn v2_base32() -> Self {
+        Self::new(
+            crate::hash::Sha256Hash,
+            crate::serialization::Base32Serializer,
+            SwhidVersion::V2,
+        )
+    }
+}
+
+#[cfg(all(feature = "sha256", feature = "encoding-base32hex"))]
+impl HashConfig<crate::hash::Sha256Hash, crate::serialization::Base32HexSerializer> {
+    /// V2 config: SHA-256 + base32hex.
+    pub fn v2_base32hex() -> Self {
+        Self::new(
+            crate::hash::Sha256Hash,
+            crate::serialization::Base32HexSerializer,
+            SwhidVersion::V2,
+        )
+    }
+}
+
+#[cfg(all(feature = "sha256", feature = "encoding-z85"))]
+impl HashConfig<crate::hash::Sha256Hash, crate::serialization::Z85Serializer> {
+    /// V2 config: SHA-256 + z85.
+    pub fn v2_z85() -> Self {
+        Self::new(
+            crate::hash::Sha256Hash,
+            crate::serialization::Z85Serializer,
+            SwhidVersion::V2,
+        )
+    }
+}
+
+#[cfg(all(feature = "sha512", feature = "encoding-hex"))]
+impl HashConfig<crate::hash::Sha512Hash, crate::serialization::HexSerializer> {
+    /// SHA-512 + hex.
+    pub fn sha512_hex() -> Self {
+        Self::new(
+            crate::hash::Sha512Hash,
+            crate::serialization::HexSerializer,
+            SwhidVersion::V2,
+        )
+    }
+}
+
+#[cfg(all(feature = "sha512", feature = "encoding-base64url"))]
+impl HashConfig<crate::hash::Sha512Hash, crate::serialization::Base64UrlSerializer> {
+    /// SHA-512 + base64url.
+    pub fn sha512_base64url() -> Self {
+        Self::new(
+            crate::hash::Sha512Hash,
+            crate::serialization::Base64UrlSerializer,
+            SwhidVersion::V2,
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Content;
+
+    #[cfg(all(feature = "sha1", feature = "encoding-hex"))]
+    #[test]
+    fn v1_content_roundtrip() {
+        let config = HashConfig::v1();
+        let content = Content::from_bytes(b"hello");
+        let swhid = content.swhid_with_config(&config);
+        assert_eq!(swhid.version(), SwhidVersion::V1);
+        let s = swhid.to_string_encoded(&config.encoder);
+        assert!(s.starts_with("swh:1:cnt:"));
+    }
+
+    #[cfg(all(feature = "sha256", feature = "encoding-hex"))]
+    #[test]
+    fn v2_hex_content_roundtrip() {
+        let config = HashConfig::v2_hex();
+        let content = Content::from_bytes(b"hello");
+        let swhid = content.swhid_with_config(&config);
+        assert_eq!(swhid.version(), SwhidVersion::V2);
+        let s = swhid.to_string_encoded(&config.encoder);
+        assert!(s.starts_with("swh:2:cnt:"));
+    }
+
+    #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
+    #[test]
+    fn v2_base64url_content_roundtrip() {
+        let config = HashConfig::v2();
+        let content = Content::from_bytes(b"hello");
+        let swhid = content.swhid_with_config(&config);
+        assert_eq!(swhid.version(), SwhidVersion::V2);
+        let s = swhid.to_string_encoded(&config.encoder);
+        assert!(s.starts_with("swh:2:cnt:"));
+    }
+
+    #[cfg(all(feature = "sha256", feature = "encoding-z85"))]
+    #[test]
+    fn v2_z85_content_roundtrip() {
+        let config = HashConfig::v2_z85();
+        let content = Content::from_bytes(b"hello");
+        let swhid = content.swhid_with_config(&config);
+        assert_eq!(swhid.version(), SwhidVersion::V2);
+        let s = swhid.to_string_encoded(&config.encoder);
+        assert!(s.starts_with("swh:2:cnt:"));
+    }
+}
