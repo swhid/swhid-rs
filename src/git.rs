@@ -33,6 +33,60 @@ fn io_error(msg: String) -> SwhidError {
     SwhidError::Io(std::io::Error::other(msg))
 }
 
+/// Infer OID size (20 or 32) from an OID's byte length.
+fn oid_size_from_oid(oid: &git2::Oid) -> Result<usize, SwhidError> {
+    let len = oid.as_bytes().len();
+    if len == 20 || len == 32 {
+        Ok(len)
+    } else {
+        Err(io_error(format!(
+            "Unsupported OID size: {} (expected 20 or 32)",
+            len
+        )))
+    }
+}
+
+/// Detect the OID size (20 for SHA1, 32 for SHA256) used by this repository.
+fn detect_oid_size(repo: &Repository) -> Result<usize, SwhidError> {
+    // Try HEAD target first
+    if let Ok(head) = repo.head() {
+        if let Some(oid) = head.target() {
+            let len = oid.as_bytes().len();
+            if len == 20 || len == 32 {
+                return Ok(len);
+            }
+        }
+    }
+    // Try first reference
+    if let Ok(refs) = repo.references() {
+        for r in refs.flatten() {
+            if let Some(oid) = r.target() {
+                let len = oid.as_bytes().len();
+                if len == 20 || len == 32 {
+                    return Ok(len);
+                }
+            }
+        }
+    }
+    Err(io_error(
+        "Cannot detect OID size: repository has no references or objects".to_string(),
+    ))
+}
+
+/// Convert git2::Oid to [u8; N]. Fails if OID length does not match N.
+fn oid_to_array<const N: usize>(oid: git2::Oid) -> Result<[u8; N], SwhidError> {
+    let bytes = oid.as_bytes();
+    bytes
+        .try_into()
+        .map_err(|_| {
+            io_error(format!(
+                "OID length mismatch: expected {} bytes, got {}",
+                N,
+                bytes.len()
+            ))
+        })
+}
+
 /// Content SWHID digest from a Git blob OID.
 /// Per spec 5.2: intrinsic identifier is hash of blob object format.
 fn content_swhid_from_blob(repo: &Repository, blob_oid: git2::Oid) -> Result<Digest, SwhidError> {
@@ -58,12 +112,12 @@ where
     Ok(hasher.hash_object("blob", blob.content()).into())
 }
 
-/// Directory SWHID digest from a Git tree OID.
+/// Directory SWHID digest from a Git tree OID (const-generic impl).
 /// Per spec 5.3: compute SWHID of each entry (content or directory), then manifest.
-fn directory_swhid_from_tree(
+fn directory_swhid_from_tree_impl<const N: usize>(
     repo: &Repository,
     tree_oid: git2::Oid,
-    cache: &mut HashMap<git2::Oid, Digest>,
+    cache: &mut HashMap<[u8; N], Digest>,
 ) -> Result<Digest, SwhidError> {
     let tree = repo
         .find_tree(tree_oid)
@@ -72,19 +126,24 @@ fn directory_swhid_from_tree(
     for entry in tree.iter() {
         let name = entry.name_bytes().to_owned().into_boxed_slice();
         let mode = entry.filemode() as u32;
+        let entry_key = oid_to_array::<N>(entry.id())?;
         let id = match entry.kind() {
-            Some(GitObjectType::Blob) => match cache.entry(entry.id()) {
+            Some(GitObjectType::Blob) => match cache.entry(entry_key) {
                 Entry::Occupied(e) => e.get().clone(),
-                Entry::Vacant(e) => e.insert(content_swhid_from_blob(repo, entry.id())?).clone(),
+                Entry::Vacant(e) => e
+                    .insert(content_swhid_from_blob(repo, entry.id())?)
+                    .clone(),
             },
-            Some(GitObjectType::Tree) => match cache.entry(entry.id()) {
-                Entry::Occupied(e) => e.get().clone(),
-                Entry::Vacant(_) => {
-                    let digest = directory_swhid_from_tree(repo, entry.id(), cache)?;
-                    cache.insert(entry.id(), digest.clone());
+            Some(GitObjectType::Tree) => {
+                if let Some(d) = cache.get(&entry_key) {
+                    d.clone()
+                } else {
+                    let digest =
+                        directory_swhid_from_tree_impl::<N>(repo, entry.id(), cache)?;
+                    cache.insert(entry_key, digest.clone());
                     digest
                 }
-            },
+            }
             _ => {
                 return Err(io_error(format!(
                     "Tree entry {:?} has unsupported type",
@@ -99,11 +158,11 @@ fn directory_swhid_from_tree(
     Ok(Digest::from(hash_swhid_object("tree", &manifest)))
 }
 
-/// Directory SWHID digest using the given hasher.
-fn directory_swhid_from_tree_with<H: HashFunction>(
+/// Directory SWHID digest using the given hasher (const-generic impl).
+fn directory_swhid_from_tree_with_impl<const N: usize, H: HashFunction>(
     repo: &Repository,
     tree_oid: git2::Oid,
-    cache: &mut HashMap<git2::Oid, Digest>,
+    cache: &mut HashMap<[u8; N], Digest>,
     hasher: &H,
 ) -> Result<Digest, SwhidError>
 where
@@ -116,21 +175,28 @@ where
     for entry in tree.iter() {
         let name = entry.name_bytes().to_owned().into_boxed_slice();
         let mode = entry.filemode() as u32;
+        let entry_key = oid_to_array::<N>(entry.id())?;
         let id = match entry.kind() {
-            Some(GitObjectType::Blob) => match cache.entry(entry.id()) {
+            Some(GitObjectType::Blob) => match cache.entry(entry_key) {
                 Entry::Occupied(e) => e.get().clone(),
                 Entry::Vacant(e) => e
                     .insert(content_swhid_from_blob_with(repo, entry.id(), hasher)?)
                     .clone(),
             },
-            Some(GitObjectType::Tree) => match cache.entry(entry.id()) {
-                Entry::Occupied(e) => e.get().clone(),
-                Entry::Vacant(_) => {
-                    let digest = directory_swhid_from_tree_with(repo, entry.id(), cache, hasher)?;
-                    cache.insert(entry.id(), digest.clone());
+            Some(GitObjectType::Tree) => {
+                if let Some(d) = cache.get(&entry_key) {
+                    d.clone()
+                } else {
+                    let digest = directory_swhid_from_tree_with_impl::<N, H>(
+                        repo,
+                        entry.id(),
+                        cache,
+                        hasher,
+                    )?;
+                    cache.insert(entry_key, digest.clone());
                     digest
                 }
-            },
+            }
             _ => {
                 return Err(io_error(format!(
                     "Tree entry {:?} has unsupported type",
@@ -219,16 +285,36 @@ fn parse_header(mut manifest: &[u8]) -> Result<Vec<(&[u8], Bytestring)>, SwhidEr
 pub fn revision_swhid(
     repo: &Repository,
     commit_oid: &git2::Oid,
-    cache: &mut HashMap<git2::Oid, Digest>,
 ) -> Result<Swhid, SwhidError> {
-    revision_from_git(repo, commit_oid, cache).map(|rev| rev.swhid())
+    revision_from_git(repo, commit_oid).map(|rev| rev.swhid())
 }
 
 #[doc(hidden)]
 pub fn revision_from_git(
     repo: &Repository,
     commit_oid: &git2::Oid,
-    cache: &mut HashMap<git2::Oid, Digest>,
+) -> Result<Revision, SwhidError> {
+    let n = detect_oid_size(repo).or_else(|_| oid_size_from_oid(commit_oid))?;
+    match n {
+        20 => {
+            let mut cache = HashMap::new();
+            revision_from_git_impl::<20>(repo, commit_oid, &mut cache)
+        }
+        32 => {
+            let mut cache = HashMap::new();
+            revision_from_git_impl::<32>(repo, commit_oid, &mut cache)
+        }
+        _ => Err(io_error(format!(
+            "Unsupported OID size: {} (expected 20 or 32)",
+            n
+        ))),
+    }
+}
+
+fn revision_from_git_impl<const N: usize>(
+    repo: &Repository,
+    commit_oid: &git2::Oid,
+    cache: &mut HashMap<[u8; N], Digest>,
 ) -> Result<Revision, SwhidError> {
     let commit = repo
         .find_commit(*commit_oid)
@@ -239,14 +325,20 @@ pub fn revision_from_git(
         .map_err(|e| io_error(format!("Failed to get commit tree: {e}")))?;
 
     let tree_oid = tree.id();
-    let directory = directory_swhid_from_tree(repo, tree_oid, cache)?;
+    let directory = directory_swhid_from_tree_impl::<N>(repo, tree_oid, cache)?;
     let parents: Vec<Digest> = commit
         .parents()
-        .map(|p| match cache.entry(p.id()) {
-            Entry::Occupied(e) => Ok(e.get().clone()),
-            Entry::Vacant(_) => {
-                let digest = revision_swhid(repo, &p.id(), cache)?.digest().clone();
-                cache.insert(p.id(), digest.clone());
+        .map(|p| {
+            let key = oid_to_array::<N>(p.id())?;
+            if let Some(d) = cache.get(&key) {
+                Ok(d.clone())
+            } else {
+                let digest =
+                    revision_from_git_impl::<N>(repo, &p.id(), cache)?
+                        .swhid()
+                        .digest()
+                        .clone();
+                cache.insert(key, digest.clone());
                 Ok(digest)
             }
         })
@@ -282,7 +374,6 @@ pub fn revision_from_git(
 pub fn revision_swhid_with_config<H, E>(
     repo: &Repository,
     commit_oid: &git2::Oid,
-    cache: &mut HashMap<git2::Oid, Digest>,
     config: &HashConfig<H, E>,
 ) -> Result<Swhid, SwhidError>
 where
@@ -290,7 +381,7 @@ where
     E: DigestSerializer,
     H::Output: Into<Digest>,
 {
-    revision_from_git_with_config(repo, commit_oid, cache, config)
+    revision_from_git_with_config(repo, commit_oid, config)
         .map(|rev| rev.swhid_with_config(config))
 }
 
@@ -298,7 +389,35 @@ where
 pub fn revision_from_git_with_config<H, E>(
     repo: &Repository,
     commit_oid: &git2::Oid,
-    cache: &mut HashMap<git2::Oid, Digest>,
+    config: &HashConfig<H, E>,
+) -> Result<Revision, SwhidError>
+where
+    H: HashFunction,
+    E: DigestSerializer,
+    H::Output: Into<Digest>,
+{
+    let n = detect_oid_size(repo)
+        .or_else(|_| oid_size_from_oid(commit_oid))?;
+    match n {
+        20 => {
+            let mut cache = HashMap::new();
+            revision_from_git_with_config_impl::<20, H, E>(repo, commit_oid, &mut cache, config)
+        }
+        32 => {
+            let mut cache = HashMap::new();
+            revision_from_git_with_config_impl::<32, H, E>(repo, commit_oid, &mut cache, config)
+        }
+        _ => Err(io_error(format!(
+            "Unsupported OID size: {} (expected 20 or 32)",
+            n
+        ))),
+    }
+}
+
+fn revision_from_git_with_config_impl<const N: usize, H, E>(
+    repo: &Repository,
+    commit_oid: &git2::Oid,
+    cache: &mut HashMap<[u8; N], Digest>,
     config: &HashConfig<H, E>,
 ) -> Result<Revision, SwhidError>
 where
@@ -315,16 +434,25 @@ where
         .map_err(|e| io_error(format!("Failed to get commit tree: {e}")))?;
 
     let tree_oid = tree.id();
-    let directory = directory_swhid_from_tree_with(repo, tree_oid, cache, &config.hash)?;
+    let directory =
+        directory_swhid_from_tree_with_impl::<N, H>(repo, tree_oid, cache, &config.hash)?;
     let parents: Vec<Digest> = commit
         .parents()
-        .map(|p| match cache.entry(p.id()) {
-            Entry::Occupied(e) => Ok(e.get().clone()),
-            Entry::Vacant(_) => {
-                let digest = revision_swhid_with_config(repo, &p.id(), cache, config)?
-                    .digest()
-                    .clone();
-                cache.insert(p.id(), digest.clone());
+        .map(|p| {
+            let key = oid_to_array::<N>(p.id())?;
+            if let Some(d) = cache.get(&key) {
+                Ok(d.clone())
+            } else {
+                let digest = revision_from_git_with_config_impl::<N, H, E>(
+                    repo,
+                    &p.id(),
+                    cache,
+                    config,
+                )?
+                .swhid_with_config(config)
+                .digest()
+                .clone();
+                cache.insert(key, digest.clone());
                 Ok(digest)
             }
         })
@@ -366,6 +494,28 @@ pub fn release_swhid(repo: &Repository, tag_oid: &git2::Oid) -> Result<Swhid, Sw
 
 #[doc(hidden)]
 pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Release, SwhidError> {
+    let n = detect_oid_size(repo).or_else(|_| oid_size_from_oid(tag_oid))?;
+    match n {
+        20 => {
+            let mut cache = HashMap::new();
+            release_from_git_impl::<20>(repo, tag_oid, &mut cache)
+        }
+        32 => {
+            let mut cache = HashMap::new();
+            release_from_git_impl::<32>(repo, tag_oid, &mut cache)
+        }
+        _ => Err(io_error(format!(
+            "Unsupported OID size: {} (expected 20 or 32)",
+            n
+        ))),
+    }
+}
+
+fn release_from_git_impl<const N: usize>(
+    repo: &Repository,
+    tag_oid: &git2::Oid,
+    cache: &mut HashMap<[u8; N], Digest>,
+) -> Result<Release, SwhidError> {
     use crate::release::ReleaseTargetType;
 
     let tag = repo
@@ -377,11 +527,14 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
         .map_err(|e| io_error(format!("Failed to get tag target: {e}")))?;
     let target_oid = target.id();
     let object = match target.kind() {
-        Some(GitObjectType::Commit) => revision_swhid(repo, &target_oid, &mut HashMap::new())?
+        Some(GitObjectType::Commit) => {
+            revision_from_git_impl::<N>(repo, &target_oid, cache)?
+            .swhid()
             .digest()
-            .clone(),
+            .clone()
+        }
         Some(GitObjectType::Tree) => {
-            directory_swhid_from_tree(repo, target_oid, &mut HashMap::new())?
+            directory_swhid_from_tree_impl::<N>(repo, target_oid, cache)?
         }
         Some(GitObjectType::Blob) => content_swhid_from_blob(repo, target_oid)?,
         Some(GitObjectType::Tag) => release_swhid(repo, &target_oid)?.digest().clone(),
@@ -444,6 +597,34 @@ where
     E: DigestSerializer,
     H::Output: Into<Digest>,
 {
+    let n = detect_oid_size(repo).or_else(|_| oid_size_from_oid(tag_oid))?;
+    match n {
+        20 => {
+            let mut cache = HashMap::new();
+            release_from_git_with_config_impl::<20, H, E>(repo, tag_oid, &mut cache, config)
+        }
+        32 => {
+            let mut cache = HashMap::new();
+            release_from_git_with_config_impl::<32, H, E>(repo, tag_oid, &mut cache, config)
+        }
+        _ => Err(io_error(format!(
+            "Unsupported OID size: {} (expected 20 or 32)",
+            n
+        ))),
+    }
+}
+
+fn release_from_git_with_config_impl<const N: usize, H, E>(
+    repo: &Repository,
+    tag_oid: &git2::Oid,
+    cache: &mut HashMap<[u8; N], Digest>,
+    config: &HashConfig<H, E>,
+) -> Result<Release, SwhidError>
+where
+    H: HashFunction,
+    E: DigestSerializer,
+    H::Output: Into<Digest>,
+{
     use crate::release::ReleaseTargetType;
 
     let tag = repo
@@ -454,15 +635,18 @@ where
         .target()
         .map_err(|e| io_error(format!("Failed to get tag target: {e}")))?;
     let target_oid = target.id();
-    let mut cache = HashMap::new();
     let object = match target.kind() {
-        Some(GitObjectType::Commit) => {
-            revision_swhid_with_config(repo, &target_oid, &mut cache, config)?
-                .digest()
-                .clone()
-        }
+        Some(GitObjectType::Commit) => revision_from_git_with_config_impl::<N, H, E>(
+            repo,
+            &target_oid,
+            cache,
+            config,
+        )?
+        .swhid_with_config(config)
+        .digest()
+        .clone(),
         Some(GitObjectType::Tree) => {
-            directory_swhid_from_tree_with(repo, target_oid, &mut cache, &config.hash)?
+            directory_swhid_from_tree_with_impl::<N, H>(repo, target_oid, cache, &config.hash)?
         }
         Some(GitObjectType::Blob) => content_swhid_from_blob_with(repo, target_oid, &config.hash)?,
         Some(GitObjectType::Tag) => release_swhid_with_config(repo, &target_oid, config)?
@@ -512,14 +696,36 @@ pub fn snapshot_swhid(repo: &Repository) -> Result<Swhid, SwhidError> {
 
 #[doc(hidden)]
 pub fn snapshot_from_git(repo: &Repository) -> Result<Snapshot, SwhidError> {
+    let n = detect_oid_size(repo)?;
+    match n {
+        20 => {
+            let mut cache = HashMap::new();
+            snapshot_from_git_impl::<20>(repo, &mut cache)
+        }
+        32 => {
+            let mut cache = HashMap::new();
+            snapshot_from_git_impl::<32>(repo, &mut cache)
+        }
+        _ => Err(io_error(format!(
+            "Unsupported OID size: {} (expected 20 or 32)",
+            n
+        ))),
+    }
+}
+
+fn snapshot_from_git_impl<const N: usize>(
+    repo: &Repository,
+    cache: &mut HashMap<[u8; N], Digest>,
+) -> Result<Snapshot, SwhidError> {
     let references = repo
         .references()
         .map_err(|e| io_error(format!("Failed to list references: {e}")))?;
 
-    let mut cache = HashMap::new();
     let mut branches: Vec<_> = references
         .flat_map(|reference| match reference {
-            Ok(reference) => reference_to_branch(repo, reference, &mut cache).transpose(),
+            Ok(reference) => {
+                reference_to_branch_impl::<N>(repo, reference, cache).transpose()
+            }
             Err(e) => Some(Err(io_error(format!("Failed to read reference: {e}")))),
         })
         .collect::<Result<_, _>>()?;
@@ -527,7 +733,7 @@ pub fn snapshot_from_git(repo: &Repository) -> Result<Snapshot, SwhidError> {
     let head = repo
         .head()
         .map_err(|e| io_error(format!("Failed to get HEAD: {e}")))?;
-    if let Some(head_branch) = reference_to_branch(repo, head, &mut cache)? {
+    if let Some(head_branch) = reference_to_branch_impl::<N>(repo, head, cache)? {
         let Branch { name, target: _ } = head_branch;
         branches.push(Branch {
             name: (*b"HEAD").into(),
@@ -561,15 +767,42 @@ where
     E: DigestSerializer,
     H::Output: Into<Digest>,
 {
+    let n = detect_oid_size(repo)?;
+    match n {
+        20 => {
+            let mut cache = HashMap::new();
+            snapshot_from_git_with_config_impl::<20, H, E>(repo, &mut cache, config)
+        }
+        32 => {
+            let mut cache = HashMap::new();
+            snapshot_from_git_with_config_impl::<32, H, E>(repo, &mut cache, config)
+        }
+        _ => Err(io_error(format!(
+            "Unsupported OID size: {} (expected 20 or 32)",
+            n
+        ))),
+    }
+}
+
+fn snapshot_from_git_with_config_impl<const N: usize, H, E>(
+    repo: &Repository,
+    cache: &mut HashMap<[u8; N], Digest>,
+    config: &HashConfig<H, E>,
+) -> Result<Snapshot, SwhidError>
+where
+    H: HashFunction,
+    E: DigestSerializer,
+    H::Output: Into<Digest>,
+{
     let references = repo
         .references()
         .map_err(|e| io_error(format!("Failed to list references: {e}")))?;
 
-    let mut cache = HashMap::new();
     let mut branches: Vec<_> = references
         .flat_map(|reference| match reference {
             Ok(reference) => {
-                reference_to_branch_with_config(repo, reference, &mut cache, config).transpose()
+                reference_to_branch_with_config_impl::<N, H, E>(repo, reference, cache, config)
+                    .transpose()
             }
             Err(e) => Some(Err(io_error(format!("Failed to read reference: {e}")))),
         })
@@ -578,7 +811,9 @@ where
     let head = repo
         .head()
         .map_err(|e| io_error(format!("Failed to get HEAD: {e}")))?;
-    if let Some(head_branch) = reference_to_branch_with_config(repo, head, &mut cache, config)? {
+    if let Some(head_branch) =
+        reference_to_branch_with_config_impl::<N, H, E>(repo, head, cache, config)?
+    {
         let Branch { name, target: _ } = head_branch;
         branches.push(Branch {
             name: (*b"HEAD").into(),
@@ -589,10 +824,10 @@ where
     Snapshot::new(branches).map_err(|e| io_error(format!("Invalid snapshot: {e}")))
 }
 
-fn reference_to_branch(
+fn reference_to_branch_impl<const N: usize>(
     repo: &Repository,
     reference: git2::Reference<'_>,
-    cache: &mut HashMap<git2::Oid, Digest>,
+    cache: &mut HashMap<[u8; N], Digest>,
 ) -> Result<Option<Branch>, SwhidError> {
     if !reference.is_branch() && !reference.is_tag() {
         return Ok(None);
@@ -649,15 +884,21 @@ fn reference_to_branch(
                 }
                 Some(git2::ObjectType::Any) => panic!("git2 returned an object with type 'Any'"),
                 Some(git2::ObjectType::Commit) => {
-                    let digest = revision_swhid(repo, &target_id, cache)?.digest().clone();
+                    let digest =
+                        revision_from_git_impl::<N>(repo, &target_id, cache)?
+                        .swhid()
+                        .digest()
+                        .clone();
                     BranchTarget::Revision(Some(digest))
                 }
                 Some(git2::ObjectType::Tree) => {
-                    let digest = directory_swhid_from_tree(repo, target_id, cache)?;
+                    let digest =
+                        directory_swhid_from_tree_impl::<N>(repo, target_id, cache)?;
                     BranchTarget::Directory(Some(digest))
                 }
                 Some(git2::ObjectType::Blob) => {
-                    let digest = match cache.entry(target_id) {
+                    let key = oid_to_array::<N>(target_id)?;
+                    let digest = match cache.entry(key) {
                         Entry::Occupied(e) => e.get().clone(),
                         Entry::Vacant(e) => {
                             e.insert(content_swhid_from_blob(repo, target_id)?).clone()
@@ -685,10 +926,10 @@ fn reference_to_branch(
     Ok(Some(Branch { name, target }))
 }
 
-fn reference_to_branch_with_config<H, E>(
+fn reference_to_branch_with_config_impl<const N: usize, H, E>(
     repo: &Repository,
     reference: git2::Reference<'_>,
-    cache: &mut HashMap<git2::Oid, Digest>,
+    cache: &mut HashMap<[u8; N], Digest>,
     config: &HashConfig<H, E>,
 ) -> Result<Option<Branch>, SwhidError>
 where
@@ -740,21 +981,36 @@ where
                 None => BranchTarget::Revision(None),
                 Some(git2::ObjectType::Any) => panic!("git2 returned an object with type 'Any'"),
                 Some(git2::ObjectType::Commit) => {
-                    let digest = revision_swhid_with_config(repo, &target_id, cache, config)?
-                        .digest()
-                        .clone();
+                    let digest = revision_from_git_with_config_impl::<N, H, E>(
+                        repo,
+                        &target_id,
+                        cache,
+                        config,
+                    )?
+                    .swhid_with_config(config)
+                    .digest()
+                    .clone();
                     BranchTarget::Revision(Some(digest))
                 }
                 Some(git2::ObjectType::Tree) => {
-                    let digest =
-                        directory_swhid_from_tree_with(repo, target_id, cache, &config.hash)?;
+                    let digest = directory_swhid_from_tree_with_impl::<N, H>(
+                        repo,
+                        target_id,
+                        cache,
+                        &config.hash,
+                    )?;
                     BranchTarget::Directory(Some(digest))
                 }
                 Some(git2::ObjectType::Blob) => {
-                    let digest = match cache.entry(target_id) {
+                    let key = oid_to_array::<N>(target_id)?;
+                    let digest = match cache.entry(key) {
                         Entry::Occupied(e) => e.get().clone(),
                         Entry::Vacant(e) => e
-                            .insert(content_swhid_from_blob_with(repo, target_id, &config.hash)?)
+                            .insert(content_swhid_from_blob_with(
+                                repo,
+                                target_id,
+                                &config.hash,
+                            )?)
                             .clone(),
                     };
                     BranchTarget::Content(Some(digest))

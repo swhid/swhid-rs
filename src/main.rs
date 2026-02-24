@@ -344,22 +344,16 @@ fn git_revision_swhid_string(
     hash: Option<&str>,
     format: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    use std::collections::HashMap;
     match (hash, format) {
         (None, None) => {
-            let swhid = git::revision_swhid(repo, commit_oid, &mut HashMap::new())?;
+            let swhid = git::revision_swhid(repo, commit_oid)?;
             Ok(swhid.to_string())
         }
         (Some("sha1"), Some("hex")) => {
             #[cfg(all(feature = "sha1", feature = "encoding-hex"))]
             {
                 let config = HashConfig::v1();
-                let swhid = git::revision_swhid_with_config(
-                    repo,
-                    commit_oid,
-                    &mut HashMap::new(),
-                    &config,
-                )?;
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
@@ -369,12 +363,7 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-hex"))]
             {
                 let config = HashConfig::v2_hex();
-                let swhid = git::revision_swhid_with_config(
-                    repo,
-                    commit_oid,
-                    &mut HashMap::new(),
-                    &config,
-                )?;
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-hex")))]
@@ -384,12 +373,7 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-base64"))]
             {
                 let config = HashConfig::v2_base64();
-                let swhid = git::revision_swhid_with_config(
-                    repo,
-                    commit_oid,
-                    &mut HashMap::new(),
-                    &config,
-                )?;
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64")))]
@@ -399,12 +383,7 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
             {
                 let config = HashConfig::v2();
-                let swhid = git::revision_swhid_with_config(
-                    repo,
-                    commit_oid,
-                    &mut HashMap::new(),
-                    &config,
-                )?;
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
@@ -414,12 +393,7 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-base32"))]
             {
                 let config = HashConfig::v2_base32();
-                let swhid = git::revision_swhid_with_config(
-                    repo,
-                    commit_oid,
-                    &mut HashMap::new(),
-                    &config,
-                )?;
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base32")))]
@@ -429,12 +403,7 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-base32hex"))]
             {
                 let config = HashConfig::v2_base32hex();
-                let swhid = git::revision_swhid_with_config(
-                    repo,
-                    commit_oid,
-                    &mut HashMap::new(),
-                    &config,
-                )?;
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base32hex")))]
@@ -444,12 +413,7 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-z85"))]
             {
                 let config = HashConfig::v2_z85();
-                let swhid = git::revision_swhid_with_config(
-                    repo,
-                    commit_oid,
-                    &mut HashMap::new(),
-                    &config,
-                )?;
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-z85")))]
@@ -459,12 +423,7 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha512", feature = "encoding-hex"))]
             {
                 let config = HashConfig::sha512_hex();
-                let swhid = git::revision_swhid_with_config(
-                    repo,
-                    commit_oid,
-                    &mut HashMap::new(),
-                    &config,
-                )?;
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha512", feature = "encoding-hex")))]
@@ -474,12 +433,7 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha512", feature = "encoding-base64url"))]
             {
                 let config = HashConfig::sha512_base64url();
-                let swhid = git::revision_swhid_with_config(
-                    repo,
-                    commit_oid,
-                    &mut HashMap::new(),
-                    &config,
-                )?;
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]

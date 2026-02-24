@@ -1,7 +1,5 @@
 #![cfg(feature = "git")]
 
-use std::collections::HashMap;
-
 use assert_fs::prelude::*;
 use git2::{Repository, Signature, Time};
 
@@ -56,7 +54,7 @@ fn test_revision_swhid() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid, &mut HashMap::new()).unwrap();
+    let rev = revision_from_git(&repo, &commit_oid).unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -82,7 +80,7 @@ fn test_revision_swhid() {
     // >>> rev.swhid()
     // CoreSWHID.from_string('swh:1:rev:07cde6575fb633ef9b5ecbe730e6eb97475a2fd9')
 
-    let swhid = revision_swhid(&repo, &commit_oid, &mut HashMap::new()).unwrap();
+    let swhid = revision_swhid(&repo, &commit_oid).unwrap();
     assert_eq!(
         swhid.to_string(),
         "swh:1:rev:07cde6575fb633ef9b5ecbe730e6eb97475a2fd9"
@@ -129,7 +127,7 @@ fn test_revision_negative_timezone() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid, &mut HashMap::new()).unwrap();
+    let rev = revision_from_git(&repo, &commit_oid).unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -146,7 +144,7 @@ fn test_revision_negative_timezone() {
         }
     );
 
-    let swhid = revision_swhid(&repo, &commit_oid, &mut HashMap::new()).unwrap();
+    let swhid = revision_swhid(&repo, &commit_oid).unwrap();
     assert_eq!(
         swhid.to_string(),
         "swh:1:rev:927b3b4a8291765c874d26560da492de7b3d9091"
@@ -189,7 +187,7 @@ fn test_signed_revision_swhid() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid, &mut HashMap::new()).unwrap();
+    let rev = revision_from_git(&repo, &commit_oid).unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -215,7 +213,7 @@ fn test_signed_revision_swhid() {
     // >>> rev.swhid()
     // CoreSWHID.from_string('c488a708317e88a4059d6e990f5d9004c4a4c205')
 
-    let swhid = revision_swhid(&repo, &commit_oid, &mut HashMap::new()).unwrap();
+    let swhid = revision_swhid(&repo, &commit_oid).unwrap();
     assert_eq!(
         swhid.to_string(),
         "swh:1:rev:c488a708317e88a4059d6e990f5d9004c4a4c205"

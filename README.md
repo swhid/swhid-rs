@@ -124,7 +124,7 @@ use std::path::PathBuf;
 
     // Get HEAD commit SWHID v1.2
     let head_commit = git::get_head_commit(&repo)?;
-    let revision_swhid = git::revision_swhid(&repo, &head_commit, &mut Default::default())?;
+    let revision_swhid = git::revision_swhid(&repo, &head_commit)?;
 
     // Get tag SWHID v1.2
     let tag_oid = repo.refname_to_id("refs/tags/v1.0.0")?;
