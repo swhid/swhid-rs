@@ -21,7 +21,9 @@ pub trait HashFunction: Send + Sync {
 }
 
 #[cfg(feature = "sha1")]
-pub use sha1::{hash_content_sha1 as hash_content, hash_swhid_object_sha1 as hash_swhid_object, Sha1Hash};
+pub use sha1::{
+    hash_content_sha1 as hash_content, hash_swhid_object_sha1 as hash_swhid_object, Sha1Hash,
+};
 #[cfg(feature = "sha256")]
 pub use sha256::Sha256Hash;
 #[cfg(feature = "sha512")]
@@ -71,7 +73,10 @@ mod tests {
     #[test]
     fn hash_different_object_types() {
         let data = b"same data";
-        assert_ne!(hash_swhid_object("blob", data), hash_swhid_object("tree", data));
+        assert_ne!(
+            hash_swhid_object("blob", data),
+            hash_swhid_object("tree", data)
+        );
     }
 
     #[cfg(feature = "sha1")]

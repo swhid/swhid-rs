@@ -195,7 +195,11 @@ fn read_dir_with_symlinks() {
     assert_eq!(
         dir.entries(),
         vec![
-            Entry::new(name("link.txt"), 0o120000, Digest::from(hash_content(b"target.txt"))),
+            Entry::new(
+                name("link.txt"),
+                0o120000,
+                Digest::from(hash_content(b"target.txt"))
+            ),
             Entry::new(
                 name("target.txt"),
                 0o100644,
@@ -222,7 +226,11 @@ fn read_dir_with_followed_symlinks() {
     assert_eq!(
         dir.entries(),
         vec![
-            Entry::new(name("link.txt"), 0o100644, Digest::from(hash_content(b"target content"))),
+            Entry::new(
+                name("link.txt"),
+                0o100644,
+                Digest::from(hash_content(b"target content"))
+            ),
             Entry::new(
                 name("target.txt"),
                 0o100644,

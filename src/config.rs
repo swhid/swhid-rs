@@ -22,7 +22,11 @@ where
 {
     /// Build a config from concrete hash and encoder.
     pub fn new(hash: H, encoder: E, version: SwhidVersion) -> Self {
-        Self { hash, encoder, version }
+        Self {
+            hash,
+            encoder,
+            version,
+        }
     }
 }
 

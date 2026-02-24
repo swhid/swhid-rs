@@ -9,11 +9,11 @@ use crate::core::{ObjectType, Swhid};
 use crate::digest::Digest;
 use crate::error::DirectoryError;
 use crate::hash::{hash_content, hash_swhid_object, HashFunction};
-use crate::serialization::DigestSerializer;
 use crate::permissions::{
     resolve_file_permissions, EntryPerms, PermissionPolicy, PermissionsSource,
     PermissionsSourceKind,
 };
+use crate::serialization::DigestSerializer;
 use crate::utils::check_unique;
 
 const DIRECTORY_MODE: u32 = 0o040000;
@@ -363,7 +363,10 @@ impl Directory {
     }
 
     /// Compute the SWHID using the given hash and encoding config.
-    pub fn swhid_with_config<H, E>(&self, config: &HashConfig<H, E>) -> Result<Swhid, crate::error::SwhidError>
+    pub fn swhid_with_config<H, E>(
+        &self,
+        config: &HashConfig<H, E>,
+    ) -> Result<Swhid, crate::error::SwhidError>
     where
         H: HashFunction,
         E: DigestSerializer,

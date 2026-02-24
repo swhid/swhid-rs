@@ -31,17 +31,17 @@ impl Digest {
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, SwhidError> {
         match bytes.len() {
             #[cfg(feature = "sha1")]
-            20 => Ok(Digest::Sha1(
-                bytes.try_into().map_err(|_| SwhidError::InvalidDigest("expected 20 bytes".into()))?,
-            )),
+            20 => Ok(Digest::Sha1(bytes.try_into().map_err(|_| {
+                SwhidError::InvalidDigest("expected 20 bytes".into())
+            })?)),
             #[cfg(feature = "sha256")]
-            32 => Ok(Digest::Sha256(
-                bytes.try_into().map_err(|_| SwhidError::InvalidDigest("expected 32 bytes".into()))?,
-            )),
+            32 => Ok(Digest::Sha256(bytes.try_into().map_err(|_| {
+                SwhidError::InvalidDigest("expected 32 bytes".into())
+            })?)),
             #[cfg(feature = "sha512")]
-            64 => Ok(Digest::Sha512(
-                bytes.try_into().map_err(|_| SwhidError::InvalidDigest("expected 64 bytes".into()))?,
-            )),
+            64 => Ok(Digest::Sha512(bytes.try_into().map_err(|_| {
+                SwhidError::InvalidDigest("expected 64 bytes".into())
+            })?)),
             _ => Err(SwhidError::InvalidDigest(format!(
                 "unsupported digest length: {}",
                 bytes.len()

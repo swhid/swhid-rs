@@ -148,8 +148,8 @@ impl FromStr for Swhid {
         {
             return Err(SwhidError::InvalidDigest(digest_hex.to_owned()));
         }
-        let raw =
-            hex::decode(digest_hex).map_err(|_| SwhidError::InvalidDigest(digest_hex.to_owned()))?;
+        let raw = hex::decode(digest_hex)
+            .map_err(|_| SwhidError::InvalidDigest(digest_hex.to_owned()))?;
         let digest = Digest::from_bytes(raw)?;
         Ok(Swhid::new(object_type, digest, version))
     }
@@ -409,7 +409,7 @@ mod tests {
         assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c539"
             .parse::<Swhid>()
             .is_err()); // too short (odd length)
-        // 42 hex chars = 21 bytes, not a supported digest length
+                        // 42 hex chars = 21 bytes, not a supported digest length
         assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391ab"
             .parse::<Swhid>()
             .is_err());

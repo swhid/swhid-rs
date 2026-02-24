@@ -25,20 +25,6 @@ pub use config::HashConfig;
 pub use content::Content;
 pub use core::{ObjectType, Swhid};
 pub use digest::Digest;
-pub use serialization::DigestSerializer;
-#[cfg(feature = "encoding-hex")]
-pub use serialization::HexSerializer;
-#[cfg(feature = "encoding-base64")]
-pub use serialization::Base64Serializer;
-#[cfg(feature = "encoding-base64url")]
-pub use serialization::Base64UrlSerializer;
-#[cfg(feature = "encoding-base32")]
-pub use serialization::Base32Serializer;
-#[cfg(feature = "encoding-base32hex")]
-pub use serialization::Base32HexSerializer;
-#[cfg(feature = "encoding-z85")]
-pub use serialization::Z85Serializer;
-pub use types::SwhidVersion;
 pub use directory::{Directory, DiskDirectoryBuilder, Entry, WalkOptions};
 pub use directory::{DirectoryBuildOptions, ManifestEntry};
 pub use permissions::{
@@ -48,7 +34,21 @@ pub use permissions::{
 pub use qualifier::{ByteRange, LineRange, QualifiedSwhid};
 pub use release::{Release, ReleaseTargetType};
 pub use revision::Revision;
+#[cfg(feature = "encoding-base32hex")]
+pub use serialization::Base32HexSerializer;
+#[cfg(feature = "encoding-base32")]
+pub use serialization::Base32Serializer;
+#[cfg(feature = "encoding-base64")]
+pub use serialization::Base64Serializer;
+#[cfg(feature = "encoding-base64url")]
+pub use serialization::Base64UrlSerializer;
+pub use serialization::DigestSerializer;
+#[cfg(feature = "encoding-hex")]
+pub use serialization::HexSerializer;
+#[cfg(feature = "encoding-z85")]
+pub use serialization::Z85Serializer;
 pub use snapshot::{Branch, BranchTarget, Snapshot};
+pub use types::SwhidVersion;
 
 #[cfg(feature = "serde")]
 pub use serde::{Deserialize, Serialize};

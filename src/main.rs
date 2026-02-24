@@ -354,8 +354,12 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha1", feature = "encoding-hex"))]
             {
                 let config = HashConfig::v1();
-                let swhid =
-                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                let swhid = git::revision_swhid_with_config(
+                    repo,
+                    commit_oid,
+                    &mut HashMap::new(),
+                    &config,
+                )?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
@@ -365,8 +369,12 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-hex"))]
             {
                 let config = HashConfig::v2_hex();
-                let swhid =
-                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                let swhid = git::revision_swhid_with_config(
+                    repo,
+                    commit_oid,
+                    &mut HashMap::new(),
+                    &config,
+                )?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-hex")))]
@@ -376,8 +384,12 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-base64"))]
             {
                 let config = HashConfig::v2_base64();
-                let swhid =
-                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                let swhid = git::revision_swhid_with_config(
+                    repo,
+                    commit_oid,
+                    &mut HashMap::new(),
+                    &config,
+                )?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64")))]
@@ -387,8 +399,12 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
             {
                 let config = HashConfig::v2();
-                let swhid =
-                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                let swhid = git::revision_swhid_with_config(
+                    repo,
+                    commit_oid,
+                    &mut HashMap::new(),
+                    &config,
+                )?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
@@ -398,8 +414,12 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-base32"))]
             {
                 let config = HashConfig::v2_base32();
-                let swhid =
-                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                let swhid = git::revision_swhid_with_config(
+                    repo,
+                    commit_oid,
+                    &mut HashMap::new(),
+                    &config,
+                )?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base32")))]
@@ -409,8 +429,12 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-base32hex"))]
             {
                 let config = HashConfig::v2_base32hex();
-                let swhid =
-                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                let swhid = git::revision_swhid_with_config(
+                    repo,
+                    commit_oid,
+                    &mut HashMap::new(),
+                    &config,
+                )?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base32hex")))]
@@ -420,8 +444,12 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-z85"))]
             {
                 let config = HashConfig::v2_z85();
-                let swhid =
-                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                let swhid = git::revision_swhid_with_config(
+                    repo,
+                    commit_oid,
+                    &mut HashMap::new(),
+                    &config,
+                )?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-z85")))]
@@ -431,8 +459,12 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha512", feature = "encoding-hex"))]
             {
                 let config = HashConfig::sha512_hex();
-                let swhid =
-                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                let swhid = git::revision_swhid_with_config(
+                    repo,
+                    commit_oid,
+                    &mut HashMap::new(),
+                    &config,
+                )?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha512", feature = "encoding-hex")))]
@@ -442,8 +474,12 @@ fn git_revision_swhid_string(
             #[cfg(all(feature = "sha512", feature = "encoding-base64url"))]
             {
                 let config = HashConfig::sha512_base64url();
-                let swhid =
-                    git::revision_swhid_with_config(repo, commit_oid, &mut HashMap::new(), &config)?;
+                let swhid = git::revision_swhid_with_config(
+                    repo,
+                    commit_oid,
+                    &mut HashMap::new(),
+                    &config,
+                )?;
                 Ok(swhid.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
@@ -776,7 +812,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         exclude_suffixes: exclude,
                     },
                 };
-                let dir = DiskDirectoryBuilder::new(&path).with_build_options(build_opts).build()?;
+                let dir = DiskDirectoryBuilder::new(&path)
+                    .with_build_options(build_opts)
+                    .build()?;
                 dir_swhid_string(&dir, hash, format)?
             } else {
                 eprintln!(
@@ -805,7 +843,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             } else {
                 let expected: Swhid = expected_str.parse()?;
-                let actual: Swhid = actual_str.parse().map_err(|e| format!("Computed SWHID did not parse: {e}"))?;
+                let actual: Swhid = actual_str
+                    .parse()
+                    .map_err(|e| format!("Computed SWHID did not parse: {e}"))?;
                 if actual == expected {
                     println!(
                         "✓ Verification successful: {} matches {}",
@@ -827,37 +867,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         #[cfg(feature = "git")]
         Command::Git { cmd } => match cmd {
-                GitCommand::Revision { repo, commit } => {
-                    let repo = git::open_repo(&repo)?;
-                    let commit_oid = if let Some(commit_str) = commit {
-                        git2::Oid::from_str(&commit_str)
-                            .map_err(|e| format!("Invalid commit hash: {e}"))?
-                    } else {
-                        git::get_head_commit(&repo)?
-                    };
-                    let s = git_revision_swhid_string(&repo, &commit_oid, hash, format)?;
-                    println!("{s}");
+            GitCommand::Revision { repo, commit } => {
+                let repo = git::open_repo(&repo)?;
+                let commit_oid = if let Some(commit_str) = commit {
+                    git2::Oid::from_str(&commit_str)
+                        .map_err(|e| format!("Invalid commit hash: {e}"))?
+                } else {
+                    git::get_head_commit(&repo)?
+                };
+                let s = git_revision_swhid_string(&repo, &commit_oid, hash, format)?;
+                println!("{s}");
+            }
+            GitCommand::Release { repo, tag } => {
+                let repo = git::open_repo(&repo)?;
+                let tag_oid = repo
+                    .refname_to_id(&format!("refs/tags/{tag}"))
+                    .map_err(|e| format!("Tag not found: {e}"))?;
+                let s = git_release_swhid_string(&repo, &tag_oid, hash, format)?;
+                println!("{s}");
+            }
+            GitCommand::Snapshot { repo } => {
+                let repo = git::open_repo(&repo)?;
+                let s = git_snapshot_swhid_string(&repo, hash, format)?;
+                println!("{s}");
+            }
+            GitCommand::Tags { repo } => {
+                let repo = git::open_repo(&repo)?;
+                let tags = git::get_tags(&repo)?;
+                for tag_oid in tags {
+                    println!("{tag_oid}");
                 }
-                GitCommand::Release { repo, tag } => {
-                    let repo = git::open_repo(&repo)?;
-                    let tag_oid = repo
-                        .refname_to_id(&format!("refs/tags/{tag}"))
-                        .map_err(|e| format!("Tag not found: {e}"))?;
-                    let s = git_release_swhid_string(&repo, &tag_oid, hash, format)?;
-                    println!("{s}");
-                }
-                GitCommand::Snapshot { repo } => {
-                    let repo = git::open_repo(&repo)?;
-                    let s = git_snapshot_swhid_string(&repo, hash, format)?;
-                    println!("{s}");
-                }
-                GitCommand::Tags { repo } => {
-                    let repo = git::open_repo(&repo)?;
-                    let tags = git::get_tags(&repo)?;
-                    for tag_oid in tags {
-                        println!("{tag_oid}");
-                    }
-                }
+            }
         },
     }
     Ok(())
