@@ -8,10 +8,10 @@ name: Release binaries
 
 on:
   push:
-    branches: [main]
+    branches: [main,v2-typespecialisation]
     tags: ["v*"]
   pull_request:
-    branches: [main]
+    branches: [main,v2-typespecialisation]
   workflow_dispatch:
     inputs:
       tag:
