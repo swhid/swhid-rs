@@ -1,0 +1,88 @@
+# Build release binaries for multiple platforms.
+# - Push/PR to main: artifacts are available from the Actions run.
+# - Tag push (v*): creates a GitHub Release and attaches the binaries.
+
+name: Release binaries
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifact_name: swhid-x86_64-unknown-linux-gnu
+            bin_path: target/release/swhid
+          - os: macos-14
+            target: aarch64-apple-darwin
+            artifact_name: swhid-aarch64-apple-darwin
+            bin_path: target/release/swhid
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: swhid-x86_64-pc-windows-msvc
+            bin_path: target/release/swhid.exe
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary (default features)
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.bin_path }}
+
+  release:
+    if: github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: swhid-*
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          for d in artifacts/swhid-*/; do
+            name=$(basename "$d")
+            if [ -f "$d/swhid" ]; then
+              cp "$d/swhid" "release/$name"
+            elif [ -f "$d/swhid.exe" ]; then
+              cp "$d/swhid.exe" "release/$name.exe"
+            fi
+          done
+          ls -la release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          generate_release_notes: true
+          files: release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
