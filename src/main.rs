@@ -252,7 +252,9 @@ fn compute_dir_swhid_string(
             {
                 let config = HashConfig::v1();
                 let dir = builder.build_with_config(&config)?;
-                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
             Err("sha1/hex not enabled".into())
@@ -262,7 +264,9 @@ fn compute_dir_swhid_string(
             {
                 let config = HashConfig::v2_hex();
                 let dir = builder.build_with_config(&config)?;
-                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-hex")))]
             Err("sha256/hex not enabled".into())
@@ -272,7 +276,9 @@ fn compute_dir_swhid_string(
             {
                 let config = HashConfig::v2_base64();
                 let dir = builder.build_with_config(&config)?;
-                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64")))]
             Err("sha256/base64 not enabled".into())
@@ -282,7 +288,9 @@ fn compute_dir_swhid_string(
             {
                 let config = HashConfig::v2();
                 let dir = builder.build_with_config(&config)?;
-                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
             Err("sha256/base64url not enabled".into())
@@ -292,7 +300,9 @@ fn compute_dir_swhid_string(
             {
                 let config = HashConfig::v2_base32();
                 let dir = builder.build_with_config(&config)?;
-                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base32")))]
             Err("sha256/base32 not enabled".into())
@@ -302,7 +312,9 @@ fn compute_dir_swhid_string(
             {
                 let config = HashConfig::v2_base32hex();
                 let dir = builder.build_with_config(&config)?;
-                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base32hex")))]
             Err("sha256/base32hex not enabled".into())
@@ -312,7 +324,9 @@ fn compute_dir_swhid_string(
             {
                 let config = HashConfig::v2_z85();
                 let dir = builder.build_with_config(&config)?;
-                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-z85")))]
             Err("sha256/z85 not enabled".into())
@@ -322,7 +336,9 @@ fn compute_dir_swhid_string(
             {
                 let config = HashConfig::sha512_hex();
                 let dir = builder.build_with_config(&config)?;
-                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha512", feature = "encoding-hex")))]
             Err("sha512/hex not enabled".into())
@@ -332,7 +348,9 @@ fn compute_dir_swhid_string(
             {
                 let config = HashConfig::sha512_base64url();
                 let dir = builder.build_with_config(&config)?;
-                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
             Err("sha512/base64url not enabled".into())

@@ -415,23 +415,15 @@ fn test_revision_swhid_sha256_repo() {
         .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
         .unwrap();
     let tree_oid = index.write_tree().unwrap();
-    assert_eq!(tree_oid.as_bytes().len(), 32, "expected 32-byte OID in SHA-256 repo");
+    assert_eq!(
+        tree_oid.as_bytes().len(),
+        32,
+        "expected 32-byte OID in SHA-256 repo"
+    );
     let tree = repo.find_tree(tree_oid).unwrap();
-    let sig = git2::Signature::new(
-        "U",
-        "u@x",
-        &git2::Time::new(1763027354, 60),
-    )
-    .unwrap();
+    let sig = git2::Signature::new("U", "u@x", &git2::Time::new(1763027354, 60)).unwrap();
     let commit_oid = repo
-        .commit(
-            Some("refs/heads/main"),
-            &sig,
-            &sig,
-            "commit",
-            &tree,
-            &[],
-        )
+        .commit(Some("refs/heads/main"), &sig, &sig, "commit", &tree, &[])
         .unwrap();
     assert_eq!(commit_oid.as_bytes().len(), 32);
     let swhid = revision_swhid(&repo, &commit_oid).unwrap();

@@ -582,8 +582,7 @@ impl<'a> DiskDirectoryBuilder<'a> {
         H::Output: Into<Digest>,
     {
         let entries = read_dir_with_hasher(self.root, self.root, &self.opts, &config.hash)?;
-        Directory::new(entries)
-            .map_err(|e| crate::error::SwhidError::Io(std::io::Error::other(e)))
+        Directory::new(entries).map_err(|e| crate::error::SwhidError::Io(std::io::Error::other(e)))
     }
 
     /// Compute the SWHID v1.2 directory identifier for this directory.

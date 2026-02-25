@@ -76,15 +76,13 @@ fn detect_oid_size(repo: &Repository) -> Result<usize, SwhidError> {
 /// Convert git2::Oid to [u8; N]. Fails if OID length does not match N.
 fn oid_to_array<const N: usize>(oid: git2::Oid) -> Result<[u8; N], SwhidError> {
     let bytes = oid.as_bytes();
-    bytes
-        .try_into()
-        .map_err(|_| {
-            io_error(format!(
-                "OID length mismatch: expected {} bytes, got {}",
-                N,
-                bytes.len()
-            ))
-        })
+    bytes.try_into().map_err(|_| {
+        io_error(format!(
+            "OID length mismatch: expected {} bytes, got {}",
+            N,
+            bytes.len()
+        ))
+    })
 }
 
 /// Content SWHID digest from a Git blob OID.
@@ -130,16 +128,13 @@ fn directory_swhid_from_tree_impl<const N: usize>(
         let id = match entry.kind() {
             Some(GitObjectType::Blob) => match cache.entry(entry_key) {
                 Entry::Occupied(e) => e.get().clone(),
-                Entry::Vacant(e) => e
-                    .insert(content_swhid_from_blob(repo, entry.id())?)
-                    .clone(),
+                Entry::Vacant(e) => e.insert(content_swhid_from_blob(repo, entry.id())?).clone(),
             },
             Some(GitObjectType::Tree) => {
                 if let Some(d) = cache.get(&entry_key) {
                     d.clone()
                 } else {
-                    let digest =
-                        directory_swhid_from_tree_impl::<N>(repo, entry.id(), cache)?;
+                    let digest = directory_swhid_from_tree_impl::<N>(repo, entry.id(), cache)?;
                     cache.insert(entry_key, digest.clone());
                     digest
                 }
@@ -282,10 +277,7 @@ fn parse_header(mut manifest: &[u8]) -> Result<Vec<(&[u8], Bytestring)>, SwhidEr
 ///
 /// This implements the SWHID v1.2 revision hashing algorithm for Git commits,
 /// creating a `swh:1:rev:<digest>` identifier according to the specification.
-pub fn revision_swhid(
-    repo: &Repository,
-    commit_oid: &git2::Oid,
-) -> Result<Swhid, SwhidError> {
+pub fn revision_swhid(repo: &Repository, commit_oid: &git2::Oid) -> Result<Swhid, SwhidError> {
     revision_from_git(repo, commit_oid).map(|rev| rev.swhid())
 }
 
@@ -333,11 +325,10 @@ fn revision_from_git_impl<const N: usize>(
             if let Some(d) = cache.get(&key) {
                 Ok(d.clone())
             } else {
-                let digest =
-                    revision_from_git_impl::<N>(repo, &p.id(), cache)?
-                        .swhid()
-                        .digest()
-                        .clone();
+                let digest = revision_from_git_impl::<N>(repo, &p.id(), cache)?
+                    .swhid()
+                    .digest()
+                    .clone();
                 cache.insert(key, digest.clone());
                 Ok(digest)
             }
@@ -381,8 +372,7 @@ where
     E: DigestSerializer,
     H::Output: Into<Digest>,
 {
-    revision_from_git_with_config(repo, commit_oid, config)
-        .map(|rev| rev.swhid_with_config(config))
+    revision_from_git_with_config(repo, commit_oid, config).map(|rev| rev.swhid_with_config(config))
 }
 
 #[doc(hidden)]
@@ -396,8 +386,7 @@ where
     E: DigestSerializer,
     H::Output: Into<Digest>,
 {
-    let n = detect_oid_size(repo)
-        .or_else(|_| oid_size_from_oid(commit_oid))?;
+    let n = detect_oid_size(repo).or_else(|_| oid_size_from_oid(commit_oid))?;
     match n {
         20 => {
             let mut cache = HashMap::new();
@@ -443,15 +432,11 @@ where
             if let Some(d) = cache.get(&key) {
                 Ok(d.clone())
             } else {
-                let digest = revision_from_git_with_config_impl::<N, H, E>(
-                    repo,
-                    &p.id(),
-                    cache,
-                    config,
-                )?
-                .swhid_with_config(config)
-                .digest()
-                .clone();
+                let digest =
+                    revision_from_git_with_config_impl::<N, H, E>(repo, &p.id(), cache, config)?
+                        .swhid_with_config(config)
+                        .digest()
+                        .clone();
                 cache.insert(key, digest.clone());
                 Ok(digest)
             }
@@ -527,15 +512,11 @@ fn release_from_git_impl<const N: usize>(
         .map_err(|e| io_error(format!("Failed to get tag target: {e}")))?;
     let target_oid = target.id();
     let object = match target.kind() {
-        Some(GitObjectType::Commit) => {
-            revision_from_git_impl::<N>(repo, &target_oid, cache)?
+        Some(GitObjectType::Commit) => revision_from_git_impl::<N>(repo, &target_oid, cache)?
             .swhid()
             .digest()
-            .clone()
-        }
-        Some(GitObjectType::Tree) => {
-            directory_swhid_from_tree_impl::<N>(repo, target_oid, cache)?
-        }
+            .clone(),
+        Some(GitObjectType::Tree) => directory_swhid_from_tree_impl::<N>(repo, target_oid, cache)?,
         Some(GitObjectType::Blob) => content_swhid_from_blob(repo, target_oid)?,
         Some(GitObjectType::Tag) => release_swhid(repo, &target_oid)?.digest().clone(),
         _ => return Err(io_error("Unknown target type".to_string())),
@@ -636,15 +617,12 @@ where
         .map_err(|e| io_error(format!("Failed to get tag target: {e}")))?;
     let target_oid = target.id();
     let object = match target.kind() {
-        Some(GitObjectType::Commit) => revision_from_git_with_config_impl::<N, H, E>(
-            repo,
-            &target_oid,
-            cache,
-            config,
-        )?
-        .swhid_with_config(config)
-        .digest()
-        .clone(),
+        Some(GitObjectType::Commit) => {
+            revision_from_git_with_config_impl::<N, H, E>(repo, &target_oid, cache, config)?
+                .swhid_with_config(config)
+                .digest()
+                .clone()
+        }
         Some(GitObjectType::Tree) => {
             directory_swhid_from_tree_with_impl::<N, H>(repo, target_oid, cache, &config.hash)?
         }
@@ -723,9 +701,7 @@ fn snapshot_from_git_impl<const N: usize>(
 
     let mut branches: Vec<_> = references
         .flat_map(|reference| match reference {
-            Ok(reference) => {
-                reference_to_branch_impl::<N>(repo, reference, cache).transpose()
-            }
+            Ok(reference) => reference_to_branch_impl::<N>(repo, reference, cache).transpose(),
             Err(e) => Some(Err(io_error(format!("Failed to read reference: {e}")))),
         })
         .collect::<Result<_, _>>()?;
@@ -884,16 +860,14 @@ fn reference_to_branch_impl<const N: usize>(
                 }
                 Some(git2::ObjectType::Any) => panic!("git2 returned an object with type 'Any'"),
                 Some(git2::ObjectType::Commit) => {
-                    let digest =
-                        revision_from_git_impl::<N>(repo, &target_id, cache)?
+                    let digest = revision_from_git_impl::<N>(repo, &target_id, cache)?
                         .swhid()
                         .digest()
                         .clone();
                     BranchTarget::Revision(Some(digest))
                 }
                 Some(git2::ObjectType::Tree) => {
-                    let digest =
-                        directory_swhid_from_tree_impl::<N>(repo, target_id, cache)?;
+                    let digest = directory_swhid_from_tree_impl::<N>(repo, target_id, cache)?;
                     BranchTarget::Directory(Some(digest))
                 }
                 Some(git2::ObjectType::Blob) => {
@@ -982,10 +956,7 @@ where
                 Some(git2::ObjectType::Any) => panic!("git2 returned an object with type 'Any'"),
                 Some(git2::ObjectType::Commit) => {
                     let digest = revision_from_git_with_config_impl::<N, H, E>(
-                        repo,
-                        &target_id,
-                        cache,
-                        config,
+                        repo, &target_id, cache, config,
                     )?
                     .swhid_with_config(config)
                     .digest()
@@ -1006,11 +977,7 @@ where
                     let digest = match cache.entry(key) {
                         Entry::Occupied(e) => e.get().clone(),
                         Entry::Vacant(e) => e
-                            .insert(content_swhid_from_blob_with(
-                                repo,
-                                target_id,
-                                &config.hash,
-                            )?)
+                            .insert(content_swhid_from_blob_with(repo, target_id, &config.hash)?)
                             .clone(),
                     };
                     BranchTarget::Content(Some(digest))
