@@ -3,6 +3,7 @@
 This crate provides a minimal implementation of the SWHID (SoftWare Hash IDentifier) format as defined in **ISO/IEC 18670:2025** and detailed in the SWHID v1.2 specification;
 
 This implementation is **fully compliant** with SWHID v1.2 and provides:
+
 - Core identifier representation and parsing/printing (`swh:1:<tag>:<id>`)
 - All SWHID v1.2 object types: contents (`cnt`), directories (`dir`), revisions (`rev`),
   releases (`rel`), snapshots (`snp`)
@@ -20,6 +21,10 @@ VCS Integration (optional):
 | `serde` | Enable `Serialize`/`Deserialize` for all public types |
 | `git` | Enable VCS integration for SWHID v1.2 revision/release/snapshot computation |
 
+## Installing the CLI
+- **Install (Rust):** `cargo install swhid` (add `--features git` for VCS commands).
+- **Binaries:** [Releases](https://github.com/swhid/swhid-rs/releases) (tagged versions) or [Actions](https://github.com/swhid/swhid-rs/actions/workflows/release-binaries.yml) (latest build). Download for your OS/arch, extract, and run (e.g. `./swhid --help`).
+- **More:** [User guide](docs/user-guide.md) for all install options and CLI usage.
 
 ## Examples
 
