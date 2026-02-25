@@ -128,6 +128,28 @@ fn read_empty_dir() {
 }
 
 #[test]
+#[cfg(all(feature = "sha256", feature = "encoding-hex"))]
+fn build_with_config_sha256_empty_dir() {
+    use swhid::HashConfig;
+
+    let tmp = assert_fs::TempDir::new().unwrap();
+    let config = HashConfig::v2_hex();
+    let dir = DiskDirectoryBuilder::new(tmp.path())
+        .build_with_config(&config)
+        .unwrap();
+
+    assert_eq!(dir.entries(), vec![]);
+
+    // Empty tree in Git SHA256 format: hash of "tree 0\0"
+    let swhid = dir.swhid_with_config(&config).unwrap();
+    let s = swhid.to_string_encoded(&config.encoder);
+    assert_eq!(
+        s,
+        "swh:2:dir:6ef19b41225c5369f1c104d45d8d85efa9b057b53b14b4b9b939dd74decc5321"
+    );
+}
+
+#[test]
 fn read_simple_dir() {
     let tmp = assert_fs::TempDir::new().unwrap();
     tmp.child("a.txt").write_str("A").unwrap();

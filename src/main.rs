@@ -235,20 +235,24 @@ fn content_swhid_string(
     }
 }
 
-/// Compute directory SWHID string; when hash/format are set use that config.
-fn dir_swhid_string(
-    dir: &swhid::Directory,
+/// Compute directory SWHID string. When hash/format are set, uses build_with_config
+/// so child object IDs use the configured hash (e.g. SHA256).
+fn compute_dir_swhid_string(
+    builder: DiskDirectoryBuilder,
     hash: Option<&str>,
     format: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     match (hash, format) {
-        (None, None) => Ok(dir.swhid()?.to_string()),
+        (None, None) => {
+            let dir = builder.build()?;
+            Ok(dir.swhid()?.to_string())
+        }
         (Some("sha1"), Some("hex")) => {
             #[cfg(all(feature = "sha1", feature = "encoding-hex"))]
             {
                 let config = HashConfig::v1();
-                let swhid = dir.swhid_with_config(&config)?;
-                Ok(swhid.to_string_encoded(&config.encoder))
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha1", feature = "encoding-hex")))]
             Err("sha1/hex not enabled".into())
@@ -257,8 +261,8 @@ fn dir_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-hex"))]
             {
                 let config = HashConfig::v2_hex();
-                let swhid = dir.swhid_with_config(&config)?;
-                Ok(swhid.to_string_encoded(&config.encoder))
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-hex")))]
             Err("sha256/hex not enabled".into())
@@ -267,8 +271,8 @@ fn dir_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-base64"))]
             {
                 let config = HashConfig::v2_base64();
-                let swhid = dir.swhid_with_config(&config)?;
-                Ok(swhid.to_string_encoded(&config.encoder))
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64")))]
             Err("sha256/base64 not enabled".into())
@@ -277,8 +281,8 @@ fn dir_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-base64url"))]
             {
                 let config = HashConfig::v2();
-                let swhid = dir.swhid_with_config(&config)?;
-                Ok(swhid.to_string_encoded(&config.encoder))
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base64url")))]
             Err("sha256/base64url not enabled".into())
@@ -287,8 +291,8 @@ fn dir_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-base32"))]
             {
                 let config = HashConfig::v2_base32();
-                let swhid = dir.swhid_with_config(&config)?;
-                Ok(swhid.to_string_encoded(&config.encoder))
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base32")))]
             Err("sha256/base32 not enabled".into())
@@ -297,8 +301,8 @@ fn dir_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-base32hex"))]
             {
                 let config = HashConfig::v2_base32hex();
-                let swhid = dir.swhid_with_config(&config)?;
-                Ok(swhid.to_string_encoded(&config.encoder))
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-base32hex")))]
             Err("sha256/base32hex not enabled".into())
@@ -307,8 +311,8 @@ fn dir_swhid_string(
             #[cfg(all(feature = "sha256", feature = "encoding-z85"))]
             {
                 let config = HashConfig::v2_z85();
-                let swhid = dir.swhid_with_config(&config)?;
-                Ok(swhid.to_string_encoded(&config.encoder))
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha256", feature = "encoding-z85")))]
             Err("sha256/z85 not enabled".into())
@@ -317,8 +321,8 @@ fn dir_swhid_string(
             #[cfg(all(feature = "sha512", feature = "encoding-hex"))]
             {
                 let config = HashConfig::sha512_hex();
-                let swhid = dir.swhid_with_config(&config)?;
-                Ok(swhid.to_string_encoded(&config.encoder))
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha512", feature = "encoding-hex")))]
             Err("sha512/hex not enabled".into())
@@ -327,8 +331,8 @@ fn dir_swhid_string(
             #[cfg(all(feature = "sha512", feature = "encoding-base64url"))]
             {
                 let config = HashConfig::sha512_base64url();
-                let swhid = dir.swhid_with_config(&config)?;
-                Ok(swhid.to_string_encoded(&config.encoder))
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir.swhid_with_config(&config)?.to_string_encoded(&config.encoder))
             }
             #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
             Err("sha512/base64url not enabled".into())
@@ -719,9 +723,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 },
             };
 
-            let dir = DiskDirectoryBuilder::new(&path).with_build_options(build_opts);
-            let dir = dir.build()?;
-            let s = dir_swhid_string(&dir, hash, format)?;
+            let builder = DiskDirectoryBuilder::new(&path).with_build_options(build_opts);
+            let s = compute_dir_swhid_string(builder, hash, format)?;
             println!("{s}");
         }
         Command::Parse { swhid } => {
@@ -766,10 +769,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         exclude_suffixes: exclude,
                     },
                 };
-                let dir = DiskDirectoryBuilder::new(&path)
-                    .with_build_options(build_opts)
-                    .build()?;
-                dir_swhid_string(&dir, hash, format)?
+                let builder = DiskDirectoryBuilder::new(&path).with_build_options(build_opts);
+                compute_dir_swhid_string(builder, hash, format)?
             } else {
                 eprintln!(
                     "Error: {} is neither a file nor a directory",
