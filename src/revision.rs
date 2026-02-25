@@ -22,11 +22,7 @@ impl Revision {
     /// Compute the SWHID revision identifier using the given config.
     pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
         let manifest = rev_manifest(self);
-        let digest = hash_swhid_object_generic(
-            "commit",
-            &manifest,
-            config.hash_function.as_ref(),
-        );
+        let digest = hash_swhid_object_generic("commit", &manifest, config.hash_function.as_ref());
         Swhid::new(crate::ObjectType::Revision, digest, config.version)
     }
 

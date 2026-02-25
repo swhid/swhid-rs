@@ -172,9 +172,9 @@ fn config_from_hash_and_format(
     format: &str,
     version: &str,
 ) -> Result<HashConfig, Box<dyn std::error::Error>> {
-    use swhid::{HashAlgorithm, Sha1Hash, Sha256Hash};
     use swhid::HexSerializer;
     use swhid::SwhidVersion;
+    use swhid::{HashAlgorithm, Sha1Hash, Sha256Hash};
 
     // Determine hash algorithm
     let hash_algorithm = if let Some(h) = hash {
@@ -182,11 +182,9 @@ fn config_from_hash_and_format(
             "sha1" | "sha-1" => HashAlgorithm::Sha1,
             "sha256" | "sha-256" => HashAlgorithm::Sha256,
             _ => {
-                return Err(format!(
-                    "Invalid hash algorithm: {}. Must be sha1 or sha256",
-                    h
-                )
-                .into());
+                return Err(
+                    format!("Invalid hash algorithm: {}. Must be sha1 or sha256", h).into(),
+                );
             }
         }
     } else {
@@ -195,11 +193,7 @@ fn config_from_hash_and_format(
             "1" => HashAlgorithm::Sha1,
             "2" => HashAlgorithm::Sha256,
             _ => {
-                return Err(format!(
-                    "Invalid SWHID version: {}. Must be 1 or 2",
-                    version
-                )
-                .into());
+                return Err(format!("Invalid SWHID version: {}. Must be 1 or 2", version).into());
             }
         }
     };
@@ -235,9 +229,7 @@ fn config_from_hash_and_format(
             "Warning: SWHID version 1 only applies to sha1+hex. Using version 2 for the selected hash/format."
         );
     } else if version == "2" && swhid_version == SwhidVersion::V1 {
-        eprintln!(
-            "Warning: sha1+hex always uses SWHID version 1; --version 2 is ignored."
-        );
+        eprintln!("Warning: sha1+hex always uses SWHID version 1; --version 2 is ignored.");
     }
 
     // Build config
@@ -277,7 +269,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 SwhidVersion::V1 => "1",
                 SwhidVersion::V2 => "2",
             };
-            println!("swh:{}:{}:{}", version_str, s.object_type().as_tag(), encoded);
+            println!(
+                "swh:{}:{}:{}",
+                version_str,
+                s.object_type().as_tag(),
+                encoded
+            );
         }
         Command::Dir {
             path,
@@ -317,7 +314,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 SwhidVersion::V1 => "1",
                 SwhidVersion::V2 => "2",
             };
-            println!("swh:{}:{}:{}", version_str, swhid.object_type().as_tag(), encoded);
+            println!(
+                "swh:{}:{}:{}",
+                version_str,
+                swhid.object_type().as_tag(),
+                encoded
+            );
         }
         Command::Parse { swhid } => {
             // Try qualified first, fallback to core
@@ -417,7 +419,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         SwhidVersion::V1 => "1",
                         SwhidVersion::V2 => "2",
                     };
-                    println!("swh:{}:{}:{}", version_str, swhid.object_type().as_tag(), encoded);
+                    println!(
+                        "swh:{}:{}:{}",
+                        version_str,
+                        swhid.object_type().as_tag(),
+                        encoded
+                    );
                 }
                 GitCommand::Release { repo, tag } => {
                     let repo = git::open_repo(&repo)?;
@@ -430,7 +437,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         SwhidVersion::V1 => "1",
                         SwhidVersion::V2 => "2",
                     };
-                    println!("swh:{}:{}:{}", version_str, swhid.object_type().as_tag(), encoded);
+                    println!(
+                        "swh:{}:{}:{}",
+                        version_str,
+                        swhid.object_type().as_tag(),
+                        encoded
+                    );
                 }
                 GitCommand::Snapshot { repo } => {
                     let repo = git::open_repo(&repo)?;
@@ -440,7 +452,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         SwhidVersion::V1 => "1",
                         SwhidVersion::V2 => "2",
                     };
-                    println!("swh:{}:{}:{}", version_str, swhid.object_type().as_tag(), encoded);
+                    println!(
+                        "swh:{}:{}:{}",
+                        version_str,
+                        swhid.object_type().as_tag(),
+                        encoded
+                    );
                 }
                 GitCommand::Tags { repo } => {
                     let repo = git::open_repo(&repo)?;

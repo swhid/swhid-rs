@@ -54,7 +54,13 @@ fn test_revision_swhid() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid, &HashConfig::v1(), &mut std::collections::HashMap::new()).unwrap();
+    let rev = revision_from_git(
+        &repo,
+        &commit_oid,
+        &HashConfig::v1(),
+        &mut std::collections::HashMap::new(),
+    )
+    .unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -92,7 +98,9 @@ fn test_revision_swhid() {
     let s = swhid_v2.to_string();
     assert!(s.starts_with("swh:2:rev:"));
     assert_eq!(s.len(), "swh:2:rev:".len() + 64);
-    assert!(s["swh:2:rev:".len()..].chars().all(|c| c.is_ascii_hexdigit()));
+    assert!(s["swh:2:rev:".len()..]
+        .chars()
+        .all(|c| c.is_ascii_hexdigit()));
 }
 
 #[test]
@@ -135,7 +143,13 @@ fn test_revision_negative_timezone() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid, &HashConfig::v1(), &mut std::collections::HashMap::new()).unwrap();
+    let rev = revision_from_git(
+        &repo,
+        &commit_oid,
+        &HashConfig::v1(),
+        &mut std::collections::HashMap::new(),
+    )
+    .unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -195,7 +209,13 @@ fn test_signed_revision_swhid() {
         )
         .unwrap();
 
-    let rev = revision_from_git(&repo, &commit_oid, &HashConfig::v1(), &mut std::collections::HashMap::new()).unwrap();
+    let rev = revision_from_git(
+        &repo,
+        &commit_oid,
+        &HashConfig::v1(),
+        &mut std::collections::HashMap::new(),
+    )
+    .unwrap();
     assert_eq!(
         rev,
         Revision {
@@ -262,7 +282,13 @@ fn test_release_swhid() {
         )
         .unwrap();
 
-    let rel = release_from_git(&repo, &tag_oid, &HashConfig::v1(), &mut std::collections::HashMap::new()).unwrap();
+    let rel = release_from_git(
+        &repo,
+        &tag_oid,
+        &HashConfig::v1(),
+        &mut std::collections::HashMap::new(),
+    )
+    .unwrap();
     assert_eq!(
         rel,
         Release {

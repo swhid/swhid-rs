@@ -28,11 +28,7 @@ impl Release {
     /// Compute the SWHID release identifier using the given config.
     pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
         let manifest = rel_manifest(self);
-        let digest = hash_swhid_object_generic(
-            "tag",
-            &manifest,
-            config.hash_function.as_ref(),
-        );
+        let digest = hash_swhid_object_generic("tag", &manifest, config.hash_function.as_ref());
         Swhid::new(crate::ObjectType::Release, digest, config.version)
     }
 

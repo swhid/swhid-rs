@@ -2,8 +2,8 @@
 
 use crate::hash::{HashFunction, Sha1Hash, Sha256Hash};
 use crate::serialization::{
-    Base32HexSerializer, Base32Serializer, Base64Serializer, Base64UrlSerializer,
-    DigestSerializer, HexSerializer, Z85Serializer,
+    Base32HexSerializer, Base32Serializer, Base64Serializer, Base64UrlSerializer, DigestSerializer,
+    HexSerializer, Z85Serializer,
 };
 use crate::types::SwhidVersion;
 

@@ -46,7 +46,10 @@ fn content_swhid_from_blob(
         .find_blob(blob_oid)
         .map_err(|e| io_error(format!("Failed to find blob {blob_oid}: {e}")))?;
     let bytes = blob.content();
-    Ok(Content::from_bytes(bytes).swhid_with_config(config).digest_bytes().to_vec())
+    Ok(Content::from_bytes(bytes)
+        .swhid_with_config(config)
+        .digest_bytes()
+        .to_vec())
 }
 
 /// Directory SWHID digest bytes from a Git tree OID (length depends on config).
@@ -68,7 +71,9 @@ fn directory_swhid_from_tree(
         let id = match entry.kind() {
             Some(GitObjectType::Blob) => match cache.entry(entry.id()) {
                 Entry::Occupied(e) => e.get().clone(),
-                Entry::Vacant(e) => e.insert(content_swhid_from_blob(repo, entry.id(), config)?).clone(),
+                Entry::Vacant(e) => e
+                    .insert(content_swhid_from_blob(repo, entry.id(), config)?)
+                    .clone(),
             },
             Some(GitObjectType::Tree) => match cache.entry(entry.id()) {
                 Entry::Occupied(e) => e.get().clone(),
@@ -88,7 +93,11 @@ fn directory_swhid_from_tree(
         entries.push(DirEntry::new(name, mode, id));
     }
     let dir = Directory::new(entries).map_err(|e| io_error(format!("Directory: {e}")))?;
-    Ok(dir.swhid_with_config(config).map_err(|e| io_error(e.to_string()))?.digest_bytes().to_vec())
+    Ok(dir
+        .swhid_with_config(config)
+        .map_err(|e| io_error(e.to_string()))?
+        .digest_bytes()
+        .to_vec())
 }
 
 fn parse_signature(sig: Signature) -> (Bytestring, i64, Bytestring) {
@@ -164,7 +173,8 @@ pub fn revision_swhid_with_config(
     commit_oid: &git2::Oid,
     config: &HashConfig,
 ) -> Result<Swhid, SwhidError> {
-    revision_from_git(repo, commit_oid, config, &mut HashMap::new()).map(|rev| rev.swhid_with_config(config))
+    revision_from_git(repo, commit_oid, config, &mut HashMap::new())
+        .map(|rev| rev.swhid_with_config(config))
 }
 
 /// Compute a SWHID v1.2 revision identifier from a Git commit (v1 config).
@@ -237,7 +247,8 @@ pub fn release_swhid_with_config(
     tag_oid: &git2::Oid,
     config: &HashConfig,
 ) -> Result<Swhid, SwhidError> {
-    release_from_git(repo, tag_oid, config, &mut HashMap::new()).map(|rel| rel.swhid_with_config(config))
+    release_from_git(repo, tag_oid, config, &mut HashMap::new())
+        .map(|rel| rel.swhid_with_config(config))
 }
 
 /// Compute a SWHID v1.2 release identifier from a Git tag (v1 config).
@@ -278,7 +289,9 @@ pub fn release_from_git(
         Some(GitObjectType::Tree) => directory_swhid_from_tree(repo, target_oid, config, cache)?,
         Some(GitObjectType::Blob) => match cache.entry(target_oid) {
             Entry::Occupied(e) => e.get().clone(),
-            Entry::Vacant(e) => e.insert(content_swhid_from_blob(repo, target_oid, config)?).clone(),
+            Entry::Vacant(e) => e
+                .insert(content_swhid_from_blob(repo, target_oid, config)?)
+                .clone(),
         },
         Some(GitObjectType::Tag) => match cache.entry(target_oid) {
             Entry::Occupied(e) => e.get().clone(),
@@ -340,10 +353,7 @@ pub fn snapshot_swhid(repo: &Repository) -> Result<Swhid, SwhidError> {
 }
 
 #[doc(hidden)]
-pub fn snapshot_from_git(
-    repo: &Repository,
-    config: &HashConfig,
-) -> Result<Snapshot, SwhidError> {
+pub fn snapshot_from_git(repo: &Repository, config: &HashConfig) -> Result<Snapshot, SwhidError> {
     let references = repo
         .references()
         .map_err(|e| io_error(format!("Failed to list references: {e}")))?;
@@ -449,7 +459,9 @@ fn reference_to_branch(
                 Some(git2::ObjectType::Blob) => {
                     let digest = match cache.entry(target_id) {
                         Entry::Occupied(e) => e.get().clone(),
-                        Entry::Vacant(e) => e.insert(content_swhid_from_blob(repo, target_id, config)?).clone(),
+                        Entry::Vacant(e) => e
+                            .insert(content_swhid_from_blob(repo, target_id, config)?)
+                            .clone(),
                     };
                     BranchTarget::Content(Some(digest))
                 }

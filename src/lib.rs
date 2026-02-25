@@ -22,6 +22,7 @@ pub use content::Content;
 pub use core::{ObjectType, Swhid};
 pub use directory::{Directory, DiskDirectoryBuilder, Entry, WalkOptions};
 pub use directory::{DirectoryBuildOptions, ManifestEntry};
+pub use hash::{HashFunction, Sha1Hash, Sha256Hash};
 pub use permissions::{
     resolve_file_permissions, EntryExec, EntryPerms, PermissionPolicy, PermissionsSource,
     PermissionsSourceKind,
@@ -29,10 +30,9 @@ pub use permissions::{
 pub use qualifier::{ByteRange, LineRange, QualifiedSwhid};
 pub use release::{Release, ReleaseTargetType};
 pub use revision::Revision;
-pub use hash::{HashFunction, Sha1Hash, Sha256Hash};
 pub use serialization::{
-    Base32HexSerializer, Base32Serializer, Base64Serializer, Base64UrlSerializer,
-    DigestSerializer, HexSerializer, Z85Serializer,
+    Base32HexSerializer, Base32Serializer, Base64Serializer, Base64UrlSerializer, DigestSerializer,
+    HexSerializer, Z85Serializer,
 };
 pub use snapshot::{Branch, BranchTarget, Snapshot};
 pub use types::{Encoding, HashAlgorithm, SwhidVersion};

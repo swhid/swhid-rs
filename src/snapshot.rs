@@ -61,11 +61,8 @@ impl Snapshot {
     /// Compute the SWHID snapshot identifier using the given config.
     pub fn swhid_with_config(&self, config: &HashConfig) -> Swhid {
         let manifest = snp_manifest_unchecked(&self.branches);
-        let digest = hash_swhid_object_generic(
-            "snapshot",
-            &manifest,
-            config.hash_function.as_ref(),
-        );
+        let digest =
+            hash_swhid_object_generic("snapshot", &manifest, config.hash_function.as_ref());
         Swhid::new(ObjectType::Snapshot, digest, config.version)
     }
 

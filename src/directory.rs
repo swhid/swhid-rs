@@ -340,13 +340,12 @@ impl Directory {
     }
 
     /// Compute the SWHID directory identifier using the given config.
-    pub fn swhid_with_config(&self, config: &HashConfig) -> Result<Swhid, crate::error::SwhidError> {
+    pub fn swhid_with_config(
+        &self,
+        config: &HashConfig,
+    ) -> Result<Swhid, crate::error::SwhidError> {
         let manifest = dir_manifest_unchecked(&self.entries);
-        let digest = hash_swhid_object_generic(
-            "tree",
-            &manifest,
-            config.hash_function.as_ref(),
-        );
+        let digest = hash_swhid_object_generic("tree", &manifest, config.hash_function.as_ref());
         Ok(Swhid::new(ObjectType::Directory, digest, config.version))
     }
 
@@ -399,7 +398,10 @@ impl<'a> DiskDirectoryBuilder<'a> {
     }
 
     /// Compute the SWHID directory identifier for this directory using the given config.
-    pub fn swhid_with_config(&self, config: &HashConfig) -> Result<Swhid, crate::error::SwhidError> {
+    pub fn swhid_with_config(
+        &self,
+        config: &HashConfig,
+    ) -> Result<Swhid, crate::error::SwhidError> {
         let entries = read_dir(self.root, self.root, &self.opts)?;
         Directory::new(entries)
             .map_err(|e| crate::error::SwhidError::Io(std::io::Error::other(e)))?

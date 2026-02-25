@@ -3,7 +3,8 @@ use crate::error::SwhidError;
 use super::DigestSerializer;
 
 // Z85 character set: 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#
-const Z85_CHARSET: &[u8; 85] = b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#";
+const Z85_CHARSET: &[u8; 85] =
+    b"0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-:+=^!/*?&<>()[]{}@%$#";
 
 fn z85_encode(data: &[u8]) -> String {
     // Z85 encodes 4 bytes to 5 characters
@@ -13,7 +14,7 @@ fn z85_encode(data: &[u8]) -> String {
     for chunk in data.chunks_exact(4) {
         // Convert 4 bytes to u32
         let value = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
-        
+
         // Encode to base 85 (5 characters)
         let mut encoded = [0u8; 5];
         let mut v = value;
@@ -32,13 +33,13 @@ fn z85_decode(encoded: &str) -> Result<Vec<u8>, String> {
     if encoded.len() % 5 != 0 {
         return Err("Z85 encoded string length must be multiple of 5".to_string());
     }
-    
+
     // Build reverse lookup table
     let mut char_to_value = [0u8; 256];
     for (i, &ch) in Z85_CHARSET.iter().enumerate() {
         char_to_value[ch as usize] = i as u8;
     }
-    
+
     let mut result = Vec::with_capacity((encoded.len() / 5) * 4);
     for chunk in encoded.as_bytes().chunks_exact(5) {
         // Decode from base 85
@@ -50,7 +51,7 @@ fn z85_decode(encoded: &str) -> Result<Vec<u8>, String> {
             }
             value = value * 85 + val;
         }
-        
+
         // Convert u32 to 4 bytes
         let bytes = value.to_be_bytes();
         result.extend_from_slice(&bytes);
