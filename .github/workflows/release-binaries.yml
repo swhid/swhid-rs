@@ -7,10 +7,10 @@ name: Release binaries
 
 on:
   push:
-    branches: [main]
+    branches: [main, v2-typespecialisation]
     tags: ["v*"]
   pull_request:
-    branches: [main]
+    branches: [main, v2-typespecialisation]
   workflow_dispatch:
     inputs:
       tag:
@@ -50,8 +50,8 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Build release binary (default features)
-        run: cargo build --release --target ${{ matrix.target }}
+      - name: Build release binary (default features + git)
+        run: cargo build --release --target ${{ matrix.target }} --features git
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
