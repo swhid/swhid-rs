@@ -22,15 +22,15 @@ jobs:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             artifact_name: swhid-x86_64-unknown-linux-gnu
-            bin_path: target/release/swhid
+            bin_path: target/x86_64-unknown-linux-gnu/release/swhid
           - os: macos-14
             target: aarch64-apple-darwin
             artifact_name: swhid-aarch64-apple-darwin
-            bin_path: target/release/swhid
+            bin_path: target/aarch64-apple-darwin/release/swhid
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: swhid-x86_64-pc-windows-msvc
-            bin_path: target/release/swhid.exe
+            bin_path: target/x86_64-pc-windows-msvc/release/swhid.exe
 
     runs-on: ${{ matrix.os }}
     steps:
