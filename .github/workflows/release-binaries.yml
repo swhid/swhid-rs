@@ -2,6 +2,7 @@
 # - Push/PR to main: artifacts are available from the Actions run.
 # - Tag push (v*): creates a GitHub Release and attaches the binaries.
 # - Manual run: specify a tag to build that ref and create/update the release (e.g. regenerate binaries for an existing tag).
+#   For the experimental branch, use a distinct tag prefix (e.g. v2-0.2.4 or v0.2.4-alpha) so releases stay separate from main; those are marked as pre-release.
 
 name: Release binaries
 
@@ -93,6 +94,7 @@ jobs:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           name: Release ${{ github.event.inputs.tag || github.ref_name }}
           draft: false
+          prerelease: ${{ contains(github.event.inputs.tag || github.ref_name, '-') }}
           generate_release_notes: true
           files: release/*
         env:

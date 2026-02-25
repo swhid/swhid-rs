@@ -54,8 +54,10 @@ With the `git` feature, use `swhid::git` with config: `revision_swhid_with_confi
 2. **From source**
  `cargo run --bin swhid -- [args...]` or `cargo build --release && ./target/release/swhid [args...]`
 
-3. **Pre-built binaries**
- CI builds binaries for Linux (x86_64), macOS (aarch64), and Windows (x86_64). Download from the latest [Release binaries](https://github.com/swhid/swhid-rs/actions/workflows/release-binaries.yml) run (Artifacts), or from [Releases](https://github.com/swhid/swhid-rs/releases) for tagged versions. Extract and run (e.g. `chmod +x swhid && ./swhid --help`).
+3. **Pre-built binaries**  
+   CI builds binaries for Linux (x86_64), macOS (aarch64), and Windows (x86_64). Download from the latest [Release binaries](https://github.com/swhid/swhid-rs/actions/workflows/release-binaries.yml) run (Artifacts), or from [Releases](https://github.com/swhid/swhid-rs/releases) for tagged versions. Extract and run (e.g. `chmod +x swhid && ./swhid --help`).
+
+   **Generating binaries for this branch:** Use a **distinct tag prefix** so experimental releases stay separate from main (e.g. `v2-0.2.4` or `v0.2.4-alpha`). On this branch run `git tag v2-0.2.4` then `git push origin v2-0.2.4`. The workflow builds from that tag and creates a GitHub Release (marked as pre-release). Main continues to use tags like `v0.2.3`, `v0.2.4`.
 
 ### Commands
 
