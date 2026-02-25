@@ -9,6 +9,8 @@ use swhid::{
 use swhid::{QualifiedSwhid, Swhid};
 
 #[cfg(feature = "git")]
+use std::collections::HashMap;
+#[cfg(feature = "git")]
 use swhid::git;
 
 /// Small CLI for the SWHID reference implementation
