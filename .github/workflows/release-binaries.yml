@@ -44,6 +44,7 @@ jobs:
     steps:
       - name: Set experimental prefix
         id: variant
+        shell: bash
         run: |
           ref="${{ github.ref }}"
           tag="${{ github.event.inputs.tag }}"
