@@ -29,19 +29,32 @@ jobs:
         include:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            artifact_name: swhid-x86_64-unknown-linux-gnu
+            artifact_suffix: x86_64-unknown-linux-gnu
             bin_path: target/x86_64-unknown-linux-gnu/release/swhid
           - os: macos-14
             target: aarch64-apple-darwin
-            artifact_name: swhid-aarch64-apple-darwin
+            artifact_suffix: aarch64-apple-darwin
             bin_path: target/aarch64-apple-darwin/release/swhid
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            artifact_name: swhid-x86_64-pc-windows-msvc
+            artifact_suffix: x86_64-pc-windows-msvc
             bin_path: target/x86_64-pc-windows-msvc/release/swhid.exe
 
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Set experimental prefix
+        id: variant
+        run: |
+          ref="${{ github.ref }}"
+          tag="${{ github.event.inputs.tag }}"
+          if [[ "$ref" == refs/tags/v2-exp-* ]] || \
+             [[ "$ref" == refs/heads/v2-typespecialisation ]] || \
+             [[ "$tag" == v2-exp-* ]]; then
+            echo "prefix=v2-exp-" >> $GITHUB_OUTPUT
+          else
+            echo "prefix=" >> $GITHUB_OUTPUT
+          fi
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
@@ -57,7 +70,7 @@ jobs:
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
+          name: swhid-${{ steps.variant.outputs.prefix }}${{ matrix.artifact_suffix }}
           path: ${{ matrix.bin_path }}
 
   release:
