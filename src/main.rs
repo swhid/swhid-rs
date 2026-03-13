@@ -21,7 +21,7 @@ struct Cli {
     /// SWHID version (1 or 2). Accepted for harness compatibility; use --hash and --format instead.
     #[arg(long, global = true, value_name = "VERSION")]
     version: Option<u8>,
-    /// Hash algorithm (sha1, sha256, sha512). Requires matching feature. Default: sha1.
+    /// Hash algorithm (sha1, sha256, sha512, blake3). Requires matching feature. Default: sha1.
     #[arg(long, global = true, value_name = "HASH")]
     hash: Option<String>,
     /// Digest encoding (hex, base64, base64url, base32, base32hex, z85). Requires matching feature. Default: hex.
@@ -129,7 +129,7 @@ fn hash_format_error(hash: Option<&str>, format: Option<&str>) -> String {
     format!(
         "unsupported --hash/--format (hash={h}, format={f}). \
         Supported combinations (require matching features): \
-        sha1+hex, sha256+hex, sha256+base64, sha256+base64url, sha256+base32, sha256+base32hex, sha256+z85, sha512+hex, sha512+base64url"
+        sha1+hex, sha256+hex, sha256+base64, sha256+base64url, sha256+base32, sha256+base32hex, sha256+z85, sha512+hex, sha512+base64url, blake3+hex, blake3+base64, blake3+base64url, blake3+base32, blake3+base32hex, blake3+z85"
     )
 }
 
@@ -230,6 +230,66 @@ fn content_swhid_string(
             }
             #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
             Err("sha512/base64url not enabled (compile with sha512 and encoding-base64url)".into())
+        }
+        (Some("blake3"), Some("hex")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::blake3_hex();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-hex")))]
+            Err("blake3/hex not enabled (compile with blake3 and encoding-hex)".into())
+        }
+        (Some("blake3"), Some("base64")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base64"))]
+            {
+                let config = HashConfig::blake3_base64();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base64")))]
+            Err("blake3/base64 not enabled (compile with blake3 and encoding-base64)".into())
+        }
+        (Some("blake3"), Some("base64url")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::blake3_base64url();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base64url")))]
+            Err("blake3/base64url not enabled (compile with blake3 and encoding-base64url)".into())
+        }
+        (Some("blake3"), Some("base32")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base32"))]
+            {
+                let config = HashConfig::blake3_base32();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base32")))]
+            Err("blake3/base32 not enabled (compile with blake3 and encoding-base32)".into())
+        }
+        (Some("blake3"), Some("base32hex")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base32hex"))]
+            {
+                let config = HashConfig::blake3_base32hex();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base32hex")))]
+            Err("blake3/base32hex not enabled (compile with blake3 and encoding-base32hex)".into())
+        }
+        (Some("blake3"), Some("z85")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-z85"))]
+            {
+                let config = HashConfig::blake3_z85();
+                let swhid = Content::from_bytes(bytes).swhid_with_config(&config);
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-z85")))]
+            Err("blake3/z85 not enabled (compile with blake3 and encoding-z85)".into())
         }
         _ => Err(hash_format_error(hash, format).into()),
     }
@@ -355,6 +415,78 @@ fn compute_dir_swhid_string(
             #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
             Err("sha512/base64url not enabled".into())
         }
+        (Some("blake3"), Some("hex")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::blake3_hex();
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-hex")))]
+            Err("blake3/hex not enabled".into())
+        }
+        (Some("blake3"), Some("base64")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base64"))]
+            {
+                let config = HashConfig::blake3_base64();
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base64")))]
+            Err("blake3/base64 not enabled".into())
+        }
+        (Some("blake3"), Some("base64url")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::blake3_base64url();
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base64url")))]
+            Err("blake3/base64url not enabled".into())
+        }
+        (Some("blake3"), Some("base32")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base32"))]
+            {
+                let config = HashConfig::blake3_base32();
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base32")))]
+            Err("blake3/base32 not enabled".into())
+        }
+        (Some("blake3"), Some("base32hex")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base32hex"))]
+            {
+                let config = HashConfig::blake3_base32hex();
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base32hex")))]
+            Err("blake3/base32hex not enabled".into())
+        }
+        (Some("blake3"), Some("z85")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-z85"))]
+            {
+                let config = HashConfig::blake3_z85();
+                let dir = builder.build_with_config(&config)?;
+                Ok(dir
+                    .swhid_with_config(&config)?
+                    .to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-z85")))]
+            Err("blake3/z85 not enabled".into())
+        }
         _ => Err(hash_format_error(hash, format).into()),
     }
 }
@@ -461,6 +593,66 @@ fn git_revision_swhid_string(
             #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
             Err("sha512/base64url not enabled".into())
         }
+        (Some("blake3"), Some("hex")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::blake3_hex();
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-hex")))]
+            Err("blake3/hex not enabled".into())
+        }
+        (Some("blake3"), Some("base64")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base64"))]
+            {
+                let config = HashConfig::blake3_base64();
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base64")))]
+            Err("blake3/base64 not enabled".into())
+        }
+        (Some("blake3"), Some("base64url")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::blake3_base64url();
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base64url")))]
+            Err("blake3/base64url not enabled".into())
+        }
+        (Some("blake3"), Some("base32")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base32"))]
+            {
+                let config = HashConfig::blake3_base32();
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base32")))]
+            Err("blake3/base32 not enabled".into())
+        }
+        (Some("blake3"), Some("base32hex")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base32hex"))]
+            {
+                let config = HashConfig::blake3_base32hex();
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base32hex")))]
+            Err("blake3/base32hex not enabled".into())
+        }
+        (Some("blake3"), Some("z85")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-z85"))]
+            {
+                let config = HashConfig::blake3_z85();
+                let swhid = git::revision_swhid_with_config(repo, commit_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-z85")))]
+            Err("blake3/z85 not enabled".into())
+        }
         _ => Err(hash_format_error(hash, format).into()),
     }
 }
@@ -564,6 +756,66 @@ fn git_release_swhid_string(
             #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
             Err("sha512/base64url not enabled".into())
         }
+        (Some("blake3"), Some("hex")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::blake3_hex();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-hex")))]
+            Err("blake3/hex not enabled".into())
+        }
+        (Some("blake3"), Some("base64")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base64"))]
+            {
+                let config = HashConfig::blake3_base64();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base64")))]
+            Err("blake3/base64 not enabled".into())
+        }
+        (Some("blake3"), Some("base64url")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::blake3_base64url();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base64url")))]
+            Err("blake3/base64url not enabled".into())
+        }
+        (Some("blake3"), Some("base32")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base32"))]
+            {
+                let config = HashConfig::blake3_base32();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base32")))]
+            Err("blake3/base32 not enabled".into())
+        }
+        (Some("blake3"), Some("base32hex")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base32hex"))]
+            {
+                let config = HashConfig::blake3_base32hex();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base32hex")))]
+            Err("blake3/base32hex not enabled".into())
+        }
+        (Some("blake3"), Some("z85")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-z85"))]
+            {
+                let config = HashConfig::blake3_z85();
+                let swhid = git::release_swhid_with_config(repo, tag_oid, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-z85")))]
+            Err("blake3/z85 not enabled".into())
+        }
         _ => Err(hash_format_error(hash, format).into()),
     }
 }
@@ -665,6 +917,66 @@ fn git_snapshot_swhid_string(
             }
             #[cfg(not(all(feature = "sha512", feature = "encoding-base64url")))]
             Err("sha512/base64url not enabled".into())
+        }
+        (Some("blake3"), Some("hex")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-hex"))]
+            {
+                let config = HashConfig::blake3_hex();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-hex")))]
+            Err("blake3/hex not enabled".into())
+        }
+        (Some("blake3"), Some("base64")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base64"))]
+            {
+                let config = HashConfig::blake3_base64();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base64")))]
+            Err("blake3/base64 not enabled".into())
+        }
+        (Some("blake3"), Some("base64url")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base64url"))]
+            {
+                let config = HashConfig::blake3_base64url();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base64url")))]
+            Err("blake3/base64url not enabled".into())
+        }
+        (Some("blake3"), Some("base32")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base32"))]
+            {
+                let config = HashConfig::blake3_base32();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base32")))]
+            Err("blake3/base32 not enabled".into())
+        }
+        (Some("blake3"), Some("base32hex")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-base32hex"))]
+            {
+                let config = HashConfig::blake3_base32hex();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-base32hex")))]
+            Err("blake3/base32hex not enabled".into())
+        }
+        (Some("blake3"), Some("z85")) => {
+            #[cfg(all(feature = "blake3", feature = "encoding-z85"))]
+            {
+                let config = HashConfig::blake3_z85();
+                let swhid = git::snapshot_swhid_with_config(repo, &config)?;
+                Ok(swhid.to_string_encoded(&config.encoder))
+            }
+            #[cfg(not(all(feature = "blake3", feature = "encoding-z85")))]
+            Err("blake3/z85 not enabled".into())
         }
         _ => Err(hash_format_error(hash, format).into()),
     }
