@@ -20,6 +20,8 @@ pub trait HashFunction: Send + Sync {
     fn hash_object(&self, typ: &str, payload: &[u8]) -> Self::Output;
 }
 
+#[cfg(feature = "blake3")]
+pub use blake3::Blake3Hash;
 #[cfg(feature = "sha1")]
 pub use sha1::{
     hash_content_sha1 as hash_content, hash_swhid_object_sha1 as hash_swhid_object, Sha1Hash,
@@ -28,17 +30,15 @@ pub use sha1::{
 pub use sha256::Sha256Hash;
 #[cfg(feature = "sha512")]
 pub use sha512::Sha512Hash;
-#[cfg(feature = "blake3")]
-pub use blake3::Blake3Hash;
 
+#[cfg(feature = "blake3")]
+mod blake3;
 #[cfg(feature = "sha1")]
 mod sha1;
 #[cfg(feature = "sha256")]
 mod sha256;
 #[cfg(feature = "sha512")]
 mod sha512;
-#[cfg(feature = "blake3")]
-mod blake3;
 
 #[cfg(test)]
 mod tests {
@@ -108,6 +108,10 @@ mod tests {
         let s = swhid.to_string_encoded(&config.encoder);
         assert!(s.starts_with("swh:2:cnt:"));
         let digest_part = s.strip_prefix("swh:2:cnt:").unwrap();
-        assert_eq!(digest_part.len(), 64, "BLAKE3 hex digest should be 64 chars");
+        assert_eq!(
+            digest_part.len(),
+            64,
+            "BLAKE3 hex digest should be 64 chars"
+        );
     }
 }

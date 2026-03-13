@@ -69,7 +69,7 @@ jobs:
         shell: bash
         run: |
           if [ "${{ steps.variant.outputs.prefix }}" = "v2-exp-" ]; then
-            cargo build --release --target ${{ matrix.target }} --features "git,encoding-z85,encoding-base32,encoding-base32hex,encoding-base64"
+            cargo build --release --target ${{ matrix.target }} --features "git,blake3,encoding-z85,encoding-base32,encoding-base32hex,encoding-base64"
           else
             cargo build --release --target ${{ matrix.target }} --features git
           fi

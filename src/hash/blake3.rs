@@ -8,7 +8,6 @@ use super::{swhid_object_header, HashFunction};
 #[derive(Debug, Clone, Copy)]
 pub struct Blake3Digest(pub(crate) [u8; 32]);
 
-
 impl AsRef<[u8]> for Blake3Digest {
     fn as_ref(&self) -> &[u8] {
         &self.0
