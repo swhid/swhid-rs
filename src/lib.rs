@@ -1,7 +1,7 @@
 #![doc = include_str!("../README.md")]
 
-#[cfg(not(any(feature = "sha1", feature = "sha256", feature = "sha512")))]
-compile_error!("At least one of sha1, sha256, sha512 must be enabled.");
+#[cfg(not(any(feature = "sha1", feature = "sha256", feature = "sha512", feature = "blake3")))]
+compile_error!("At least one of sha1, sha256, sha512, blake3 must be enabled.");
 
 pub mod config;
 pub mod content;

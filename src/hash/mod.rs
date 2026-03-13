@@ -28,6 +28,8 @@ pub use sha1::{
 pub use sha256::Sha256Hash;
 #[cfg(feature = "sha512")]
 pub use sha512::Sha512Hash;
+#[cfg(feature = "blake3")]
+pub use blake3::Blake3Hash;
 
 #[cfg(feature = "sha1")]
 mod sha1;
@@ -35,6 +37,8 @@ mod sha1;
 mod sha256;
 #[cfg(feature = "sha512")]
 mod sha512;
+#[cfg(feature = "blake3")]
+mod blake3;
 
 #[cfg(test)]
 mod tests {
@@ -92,5 +96,18 @@ mod tests {
         let empty_tree = hash_swhid_object("tree", &[]);
         let empty_commit = hash_swhid_object("commit", &[]);
         assert_ne!(empty_tree, empty_commit);
+    }
+
+    #[cfg(all(feature = "blake3", feature = "encoding-hex"))]
+    #[test]
+    fn blake3_empty_content_known_value() {
+        use crate::{Content, HashConfig};
+        let config = HashConfig::blake3_hex();
+        let content = Content::from_bytes(&[]);
+        let swhid = content.swhid_with_config(&config);
+        let s = swhid.to_string_encoded(&config.encoder);
+        assert!(s.starts_with("swh:2:cnt:"));
+        let digest_part = s.strip_prefix("swh:2:cnt:").unwrap();
+        assert_eq!(digest_part.len(), 64, "BLAKE3 hex digest should be 64 chars");
     }
 }

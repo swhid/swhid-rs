@@ -12,6 +12,8 @@ pub enum Digest {
     Sha256([u8; 32]),
     #[cfg(feature = "sha512")]
     Sha512([u8; 64]),
+    #[cfg(feature = "blake3")]
+    Blake3([u8; 32]),
 }
 
 impl Digest {
@@ -24,10 +26,13 @@ impl Digest {
             Digest::Sha256(a) => a.as_slice(),
             #[cfg(feature = "sha512")]
             Digest::Sha512(a) => a.as_slice(),
+            #[cfg(feature = "blake3")]
+            Digest::Blake3(a) => a.as_slice(),
         }
     }
 
     /// Build a digest from bytes; length must match an enabled hash (20, 32, or 64).
+    /// When both sha256 and blake3 are enabled, 32 bytes map to SHA-256 for backward compatibility.
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, SwhidError> {
         match bytes.len() {
             #[cfg(feature = "sha1")]
@@ -36,6 +41,10 @@ impl Digest {
             })?)),
             #[cfg(feature = "sha256")]
             32 => Ok(Digest::Sha256(bytes.try_into().map_err(|_| {
+                SwhidError::InvalidDigest("expected 32 bytes".into())
+            })?)),
+            #[cfg(all(feature = "blake3", not(feature = "sha256")))]
+            32 => Ok(Digest::Blake3(bytes.try_into().map_err(|_| {
                 SwhidError::InvalidDigest("expected 32 bytes".into())
             })?)),
             #[cfg(feature = "sha512")]
