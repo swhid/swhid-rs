@@ -5,6 +5,8 @@ This crate provides a minimal implementation of the SWHID (SoftWare Hash IDentif
 ## Exploration status
 
 > **This branch (`v2-typespecialisation`)** is an experimental refactor. It adds a config-based pipeline (v1 and v2), multiple hash algorithms (SHA-1, SHA-256, SHA-512) and encodings (hex, base64url, base32, z85, etc.), and CLI options `--hash` / `--format`. For the **stable v1-only reference**, see the `main` branch.
+>
+> **SWHID v2 exploration:** See the [test results dashboard](https://www.swhid.org/swhid-exploration-deploy/).
 
 This implementation is **fully compliant** with SWHID v1.2 and on this branch also explores v2-style identifiers:
 
@@ -16,7 +18,7 @@ This implementation is **fully compliant** with SWHID v1.2 and on this branch al
 ## Installing the CLI
 
 - **Rust:** `cargo install swhid` (add `--features git` for VCS commands). Build with default features for v1 + v2 (sha1, sha256, encoding-hex, encoding-base64url).
-- **Binaries:** [Releases](https://github.com/swhid/swhid-rs/releases) or [Actions](https://github.com/swhid/swhid-rs/actions/workflows/release-binaries.yml). Download for your OS/arch, extract, run (e.g. `./swhid --help`).
+- **Binaries:** [Releases](https://github.com/swhid/swhid-rs/releases) or [Actions](https://github.com/swhid/swhid-rs/actions/workflows/release-binaries.yml). For this branch, use pre-releases tagged `v2-exp-YYYYMMDD` (binaries named `swhid-v2-exp-<platform>`).
 - **More:** [User guide](docs/user-guide.md) for install options, library usage, v1/v2 examples, and CLI reference.
 
 ## Quick start
