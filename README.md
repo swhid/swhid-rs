@@ -8,11 +8,11 @@ This implementation is **fully compliant** with SWHID v1.2 and provides:
 - All SWHID v1.2 object types: contents (`cnt`), directories (`dir`), revisions (`rev`), releases (`rel`), snapshots (`snp`)
 - Qualified identifiers (origin, visit, anchor, path, lines, bytes)
 - SWHID v1.2 compliant hash computation for **content** and **directory** objects
-- Optional VCS integration: computing `rev`, `rel`, `snp` SWHIDs from Git (requires `git` feature)
+- Optional VCS integration: computing `rev`, `rel`, `snp` SWHIDs from Git (requires `git` or `gitoxide` feature)
 
 ## Installing the CLI
 
-- **Rust:** `cargo install swhid` (add `--features git` for VCS commands).
+- **Rust:** `cargo install swhid` (add `--features git` for VCS via libgit2, or `--features gitoxide` for VCS via gitoxide).
 - **Binaries:** [Releases](https://github.com/swhid/swhid-rs/releases) or [Actions](https://github.com/swhid/swhid-rs/actions/workflows/release-binaries.yml). Download for your OS/arch, extract, run (e.g. `./swhid --help`).
 - **More:** [User guide](docs/user-guide.md) for all install options, library usage, examples, and CLI reference.
 

@@ -163,10 +163,9 @@ fn read_dir(
     opts: &DirectoryBuildOptions,
 ) -> Result<Vec<Entry>, crate::error::SwhidError> {
     use crate::permissions::{
-        AutoPermissionsSource, FilesystemPermissionsSource, ManifestPermissionsSource,
+        AutoPermissionsSource, FilesystemPermissionsSource, GitIndexPermissionsSource,
+        GitTreePermissionsSource, ManifestPermissionsSource,
     };
-    #[cfg(feature = "git")]
-    use crate::permissions::{GitIndexPermissionsSource, GitTreePermissionsSource};
 
     // Create permission source based on options
     let permission_source: Box<dyn PermissionsSource> = match opts.permissions_source {
@@ -175,6 +174,16 @@ fn read_dir(
         #[cfg(feature = "git")]
         PermissionsSourceKind::GitIndex => {
             let repo = git2::Repository::open(root).map_err(|e| {
+                crate::error::SwhidError::Io(std::io::Error::other(format!(
+                    "Failed to open Git repository: {}",
+                    e
+                )))
+            })?;
+            Box::new(GitIndexPermissionsSource::new(repo, root.to_path_buf()))
+        }
+        #[cfg(all(feature = "gitoxide", not(feature = "git")))]
+        PermissionsSourceKind::GitIndex => {
+            let repo = gix::open(root).map_err(|e| {
                 crate::error::SwhidError::Io(std::io::Error::other(format!(
                     "Failed to open Git repository: {}",
                     e
@@ -192,6 +201,16 @@ fn read_dir(
             })?;
             Box::new(GitTreePermissionsSource::new(repo, root.to_path_buf()))
         }
+        #[cfg(all(feature = "gitoxide", not(feature = "git")))]
+        PermissionsSourceKind::GitTree => {
+            let repo = gix::open(root).map_err(|e| {
+                crate::error::SwhidError::Io(std::io::Error::other(format!(
+                    "Failed to open Git repository: {}",
+                    e
+                )))
+            })?;
+            Box::new(GitTreePermissionsSource::new(repo, root.to_path_buf()))
+        }
         PermissionsSourceKind::Manifest => {
             let manifest_path = opts.permissions_manifest_path.as_ref().ok_or_else(|| {
                 crate::error::SwhidError::InvalidFormat(
@@ -200,10 +219,10 @@ fn read_dir(
             })?;
             Box::new(ManifestPermissionsSource::load(manifest_path)?)
         }
-        #[cfg(not(feature = "git"))]
+        #[cfg(not(any(feature = "git", feature = "gitoxide")))]
         PermissionsSourceKind::GitIndex | PermissionsSourceKind::GitTree => {
             return Err(crate::error::SwhidError::InvalidFormat(
-                "Git permission sources require the 'git' feature".to_string(),
+                "Git permission sources require the 'git' or 'gitoxide' feature".to_string(),
             ));
         }
         PermissionsSourceKind::Heuristic => {

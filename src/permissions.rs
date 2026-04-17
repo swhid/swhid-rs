@@ -127,7 +127,6 @@ pub fn resolve_file_permissions(
             path.display()
         ))),
         (EntryExec::Unknown, PermissionPolicy::BestEffort) => {
-            // Default to non-executable
             Ok(EntryPerms::File { executable: false })
         }
     }
@@ -159,33 +158,34 @@ impl PermissionsSource for FilesystemPermissionsSource {
         }
         #[cfg(not(unix))]
         {
-            let _ = path; // suppress unused warning
+            let _ = path;
             Ok(EntryExec::Unknown)
         }
     }
 }
 
-#[cfg(feature = "git")]
 /// Git index-based permission source.
 ///
 /// Reads executable bit from Git index entries.
 /// This is the recommended source for Windows when working with Git repositories.
-pub struct GitIndexPermissionsSource {
-    repo: git2::Repository,
+pub struct GitIndexPermissionsSource<R> {
+    repo: R,
     root: std::path::PathBuf,
 }
 
-#[cfg(feature = "git")]
-impl GitIndexPermissionsSource {
-    pub fn new(repo: git2::Repository, root: std::path::PathBuf) -> Self {
+impl<R> GitIndexPermissionsSource<R> {
+    pub fn new(repo: R, root: std::path::PathBuf) -> Self {
         Self { repo, root }
     }
 }
 
-#[cfg(feature = "git")]
-impl PermissionsSource for GitIndexPermissionsSource {
+/// Trait for querying executable status from a Git index.
+pub(crate) trait IndexExecutableQuery {
+    fn index_is_executable(&self, git_path: &str) -> Result<EntryExec, SwhidError>;
+}
+
+impl<R: IndexExecutableQuery> PermissionsSource for GitIndexPermissionsSource<R> {
     fn executable_of(&self, path: &Path) -> Result<EntryExec, SwhidError> {
-        // Get relative path from repo root
         let rel_path = path.strip_prefix(&self.root).map_err(|_| {
             SwhidError::InvalidFormat(format!(
                 "Path {} is not under repository root {}",
@@ -193,51 +193,71 @@ impl PermissionsSource for GitIndexPermissionsSource {
                 self.root.display()
             ))
         })?;
-
-        // Convert to forward slashes for Git
         let git_path = rel_path.to_string_lossy().replace('\\', "/");
+        self.repo.index_is_executable(&git_path)
+    }
+}
 
-        let index = self.repo.index().map_err(|e| {
+#[cfg(feature = "git")]
+impl IndexExecutableQuery for git2::Repository {
+    fn index_is_executable(&self, git_path: &str) -> Result<EntryExec, SwhidError> {
+        let index = self.index().map_err(|e| {
             SwhidError::Io(std::io::Error::other(format!(
                 "Failed to read Git index: {}",
                 e
             )))
         })?;
-
-        // Find entry in index
-        if let Some(entry) = index.get_path(Path::new(&git_path), 0) {
+        if let Some(entry) = index.get_path(Path::new(git_path), 0) {
             let mode = entry.mode;
-            // Git modes: 100644 = regular, 100755 = executable
             let executable = (mode & 0o111) != 0 || mode == 0o100755;
             Ok(EntryExec::Known(executable))
         } else {
-            // Not in index, return Unknown
             Ok(EntryExec::Unknown)
         }
     }
 }
 
-#[cfg(feature = "git")]
+#[cfg(feature = "gitoxide")]
+impl IndexExecutableQuery for gix::Repository {
+    fn index_is_executable(&self, git_path: &str) -> Result<EntryExec, SwhidError> {
+        let index = self.index().map_err(|e| {
+            SwhidError::Io(std::io::Error::other(format!(
+                "Failed to read Git index: {}",
+                e
+            )))
+        })?;
+        if let Some(entry) = index.entry_by_path(git_path.as_bytes().into()) {
+            let mode = entry.mode.bits();
+            let executable = (mode & 0o111) != 0;
+            Ok(EntryExec::Known(executable))
+        } else {
+            Ok(EntryExec::Unknown)
+        }
+    }
+}
+
 /// Git tree-based permission source (HEAD).
 ///
 /// Reads executable bit from committed tree objects.
 /// This reflects the committed state rather than the working directory.
-pub struct GitTreePermissionsSource {
-    repo: git2::Repository,
+pub struct GitTreePermissionsSource<R> {
+    repo: R,
     root: std::path::PathBuf,
 }
 
-#[cfg(feature = "git")]
-impl GitTreePermissionsSource {
-    pub fn new(repo: git2::Repository, root: std::path::PathBuf) -> Self {
+impl<R> GitTreePermissionsSource<R> {
+    pub fn new(repo: R, root: std::path::PathBuf) -> Self {
         Self { repo, root }
     }
 }
 
-#[cfg(feature = "git")]
-impl PermissionsSource for GitTreePermissionsSource {
+/// Trait for querying executable status from a Git tree (HEAD).
+pub(crate) trait TreeExecutableQuery {
+    fn tree_is_executable(&self, git_path: &str) -> Result<EntryExec, SwhidError>;
+}
+
+impl<R: TreeExecutableQuery> PermissionsSource for GitTreePermissionsSource<R> {
     fn executable_of(&self, path: &Path) -> Result<EntryExec, SwhidError> {
-        // Get relative path from repo root
         let rel_path = path.strip_prefix(&self.root).map_err(|_| {
             SwhidError::InvalidFormat(format!(
                 "Path {} is not under repository root {}",
@@ -245,12 +265,15 @@ impl PermissionsSource for GitTreePermissionsSource {
                 self.root.display()
             ))
         })?;
-
-        // Convert to forward slashes for Git
         let git_path = rel_path.to_string_lossy().replace('\\', "/");
+        self.repo.tree_is_executable(&git_path)
+    }
+}
 
-        // Get HEAD tree
-        let head = self.repo.head().map_err(|e| {
+#[cfg(feature = "git")]
+impl TreeExecutableQuery for git2::Repository {
+    fn tree_is_executable(&self, git_path: &str) -> Result<EntryExec, SwhidError> {
+        let head = self.head().map_err(|e| {
             SwhidError::Io(std::io::Error::other(format!("Failed to get HEAD: {}", e)))
         })?;
         let commit = head.peel_to_commit().map_err(|e| {
@@ -263,7 +286,6 @@ impl PermissionsSource for GitTreePermissionsSource {
             SwhidError::Io(std::io::Error::other(format!("Failed to get tree: {}", e)))
         })?;
 
-        // Walk tree to find entry
         let path_parts: Vec<&str> = git_path.split('/').filter(|s| !s.is_empty()).collect();
         let mut current_tree = tree;
 
@@ -271,13 +293,11 @@ impl PermissionsSource for GitTreePermissionsSource {
             match current_tree.get_path(Path::new(part)) {
                 Ok(entry) => {
                     if i == path_parts.len() - 1 {
-                        // This is the file we're looking for
                         let mode = entry.filemode();
                         let executable = (mode & 0o111) != 0 || mode == 0o100755;
                         return Ok(EntryExec::Known(executable));
                     } else {
-                        // Navigate into subdirectory
-                        let obj = entry.to_object(&self.repo).map_err(|e| {
+                        let obj = entry.to_object(self).map_err(|e| {
                             SwhidError::Io(std::io::Error::other(format!(
                                 "Failed to get tree object: {}",
                                 e
@@ -293,7 +313,54 @@ impl PermissionsSource for GitTreePermissionsSource {
                     }
                 }
                 Err(_) => {
-                    // Not found in tree
+                    return Ok(EntryExec::Unknown);
+                }
+            }
+        }
+
+        Ok(EntryExec::Unknown)
+    }
+}
+
+#[cfg(feature = "gitoxide")]
+impl TreeExecutableQuery for gix::Repository {
+    fn tree_is_executable(&self, git_path: &str) -> Result<EntryExec, SwhidError> {
+        let head = self.head_commit().map_err(|e| {
+            SwhidError::Io(std::io::Error::other(format!("Failed to get HEAD: {}", e)))
+        })?;
+        let tree = head.tree().map_err(|e| {
+            SwhidError::Io(std::io::Error::other(format!("Failed to get tree: {}", e)))
+        })?;
+
+        let path_parts: Vec<&str> = git_path.split('/').filter(|s| !s.is_empty()).collect();
+        let mut current_tree = tree;
+
+        for (i, part) in path_parts.iter().enumerate() {
+            let found = current_tree.iter().find_map(|entry_result| {
+                let entry = entry_result.ok()?;
+                if entry.filename() == part.as_bytes() {
+                    Some((entry.mode(), entry.oid().to_owned()))
+                } else {
+                    None
+                }
+            });
+
+            match found {
+                Some((mode, oid)) => {
+                    if i == path_parts.len() - 1 {
+                        let mode_val = u32::from_str_radix(mode.as_str(), 8).unwrap_or(0o100644);
+                        let executable = (mode_val & 0o111) != 0;
+                        return Ok(EntryExec::Known(executable));
+                    } else {
+                        current_tree = self.find_tree(oid).map_err(|e| {
+                            SwhidError::Io(std::io::Error::other(format!(
+                                "Failed to get tree object: {}",
+                                e
+                            )))
+                        })?;
+                    }
+                }
+                None => {
                     return Ok(EntryExec::Unknown);
                 }
             }
@@ -349,14 +416,10 @@ impl ManifestPermissionsSource {
     /// executable = true
     /// ```
     pub fn parse(toml: &str) -> Result<Self, SwhidError> {
-        // Simple TOML parser for the specific format we need
-        // This avoids adding a TOML dependency for now
         let mut manifest = std::collections::HashMap::new();
 
-        // Split by [[file]] sections
         let sections: Vec<&str> = toml.split("[[file]]").collect();
         for section in sections.iter().skip(1) {
-            // Extract path and executable
             let mut path: Option<String> = None;
             let mut executable: Option<bool> = None;
 
@@ -376,7 +439,6 @@ impl ManifestPermissionsSource {
             }
 
             if let (Some(p), Some(exec)) = (path, executable) {
-                // Normalize path (forward slashes, reject .. and absolute)
                 let normalized = Self::normalize_path(&p)?;
                 manifest.insert(normalized, exec);
             }
@@ -386,7 +448,6 @@ impl ManifestPermissionsSource {
     }
 
     fn normalize_path(path: &str) -> Result<String, SwhidError> {
-        // Reject absolute paths
         if path.starts_with('/') || (cfg!(windows) && path.contains(':')) {
             return Err(SwhidError::InvalidFormat(format!(
                 "Manifest contains absolute path: {}",
@@ -394,7 +455,6 @@ impl ManifestPermissionsSource {
             )));
         }
 
-        // Reject .. segments
         if path.contains("..") {
             return Err(SwhidError::InvalidFormat(format!(
                 "Manifest contains '..' in path: {}",
@@ -402,14 +462,12 @@ impl ManifestPermissionsSource {
             )));
         }
 
-        // Normalize to forward slashes
         Ok(path.replace('\\', "/"))
     }
 }
 
 impl PermissionsSource for ManifestPermissionsSource {
     fn executable_of(&self, path: &Path) -> Result<EntryExec, SwhidError> {
-        // Normalize path for lookup
         let path_str = path.to_string_lossy().replace('\\', "/");
         if let Some(&executable) = self.manifest.get(&path_str) {
             Ok(EntryExec::Known(executable))
@@ -436,7 +494,6 @@ impl AutoPermissionsSource {
     /// If found and `git` feature is enabled, uses Git index source.
     /// Otherwise, falls back to filesystem source.
     pub fn new(_root: &Path) -> Result<Self, SwhidError> {
-        // Try to find Git repository
         #[cfg(feature = "git")]
         {
             let mut current = Some(_root);
@@ -452,16 +509,35 @@ impl AutoPermissionsSource {
                                 )),
                             });
                         }
-                        Err(_) => {
-                            // Continue searching
-                        }
+                        Err(_) => {}
                     }
                 }
                 current = path.parent();
             }
         }
 
-        // Fall back to filesystem
+        #[cfg(all(feature = "gitoxide", not(feature = "git")))]
+        {
+            let mut current = Some(_root);
+            while let Some(path) = current {
+                let git_dir = path.join(".git");
+                if git_dir.exists() {
+                    match gix::open(path) {
+                        Ok(repo) => {
+                            return Ok(Self {
+                                inner: Box::new(GitIndexPermissionsSource::new(
+                                    repo,
+                                    path.to_path_buf(),
+                                )),
+                            });
+                        }
+                        Err(_) => {}
+                    }
+                }
+                current = path.parent();
+            }
+        }
+
         Ok(Self {
             inner: Box::new(FilesystemPermissionsSource),
         })

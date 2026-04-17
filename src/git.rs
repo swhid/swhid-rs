@@ -82,15 +82,6 @@ fn directory_swhid_from_tree(
 }
 
 fn parse_signature(sig: Signature) -> (Bytestring, i64, Bytestring) {
-    let name = sig.name_bytes();
-    let email = sig.email_bytes();
-
-    let mut full_name = Vec::with_capacity(name.len() + email.len() + 3);
-    full_name.extend_from_slice(name);
-    full_name.extend_from_slice(b" <");
-    full_name.extend_from_slice(email);
-    full_name.push(b'>');
-
     let when = sig.when();
     let sign = when.sign();
     let offset_minutes = when.offset_minutes().abs();
@@ -98,7 +89,7 @@ fn parse_signature(sig: Signature) -> (Bytestring, i64, Bytestring) {
     let offset_minutes = offset_minutes % 60;
     let offset = format!("{sign}{offset_hours:02}{offset_minutes:02}");
 
-    (full_name.into(), when.seconds(), offset.into_bytes().into())
+    crate::utils::build_signature(sig.name_bytes(), sig.email_bytes(), when.seconds(), &offset)
 }
 
 /// Returns key-value pairs and the message
