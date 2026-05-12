@@ -8,10 +8,14 @@ use swhid::{
 };
 use swhid::{QualifiedSwhid, Swhid};
 
-#[cfg(feature = "git")]
+#[cfg(all(feature = "gitoxide", not(feature = "git")))]
+use gix;
+#[cfg(any(feature = "git", feature = "gitoxide"))]
 use std::collections::HashMap;
 #[cfg(feature = "git")]
 use swhid::git;
+#[cfg(all(feature = "gitoxide", not(feature = "git")))]
+use swhid::git_gix;
 
 /// Small CLI for the SWHID reference implementation
 #[derive(Parser, Debug)]
@@ -81,15 +85,15 @@ enum Command {
         #[arg(long, value_name = "PATH")]
         permissions_manifest: Option<PathBuf>,
     },
-    /// Git repository SWHID computation (requires --features git)
-    #[cfg(feature = "git")]
+    /// Git repository SWHID computation (requires --features git or --features gitoxide)
+    #[cfg(any(feature = "git", feature = "gitoxide"))]
     Git {
         #[command(subcommand)]
         cmd: GitCommand,
     },
 }
 
-#[cfg(feature = "git")]
+#[cfg(any(feature = "git", feature = "gitoxide"))]
 #[derive(Subcommand, Debug)]
 enum GitCommand {
     /// Compute revision SWHID for a commit
@@ -297,6 +301,45 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             GitCommand::Tags { repo } => {
                 let repo = git::open_repo(&repo)?;
                 let tags = git::get_tags(&repo)?;
+                for tag_oid in tags {
+                    println!("{tag_oid}");
+                }
+            }
+        },
+        #[cfg(all(feature = "gitoxide", not(feature = "git")))]
+        Command::Git { cmd } => match cmd {
+            GitCommand::Revision { repo, commit } => {
+                let repo = git_gix::open_repo(&repo)?;
+                let commit_oid = if let Some(commit_str) = commit {
+                    gix::ObjectId::from_hex(commit_str.as_bytes())
+                        .map_err(|e| format!("Invalid commit hash: {e}"))?
+                } else {
+                    git_gix::get_head_commit(&repo)?
+                };
+                let swhid = git_gix::revision_swhid(&repo, &commit_oid, &mut HashMap::new())?;
+                println!("{swhid}");
+            }
+            GitCommand::Release { repo, tag } => {
+                let repo = git_gix::open_repo(&repo)?;
+                let reference = repo
+                    .find_reference(&format!("refs/tags/{tag}"))
+                    .map_err(|e| format!("Tag not found: {e}"))?;
+                let tag_oid = reference
+                    .target()
+                    .try_id()
+                    .ok_or_else(|| "Tag is symbolic, not a direct reference".to_string())?
+                    .to_owned();
+                let swhid = git_gix::release_swhid(&repo, &tag_oid)?;
+                println!("{swhid}");
+            }
+            GitCommand::Snapshot { repo } => {
+                let repo = git_gix::open_repo(&repo)?;
+                let swhid = git_gix::snapshot_swhid(&repo)?;
+                println!("{swhid}");
+            }
+            GitCommand::Tags { repo } => {
+                let repo = git_gix::open_repo(&repo)?;
+                let tags = git_gix::get_tags(&repo)?;
                 for tag_oid in tags {
                     println!("{tag_oid}");
                 }

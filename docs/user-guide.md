@@ -16,7 +16,14 @@ Parsing: `Swhid::from_str` or `"swh:1:cnt:...".parse::<Swhid>()`. Display uses l
 
 ### Git integration
 
-With the `git` feature, use `swhid::git` to compute revision, release, and snapshot SWHIDs from a Git repository: `revision_swhid`, `release_swhid`, `snapshot_swhid`, etc.
+Two backend options are available for computing revision, release, and snapshot SWHIDs from Git repositories:
+
+- **`git` feature** — uses libgit2 (via the `git2` crate).
+- **`gitoxide` feature** — uses gitoxide (via the `gix` crate).
+
+Both produce identical SWHIDs.
+
+With the `git` feature, use `swhid::git`. With the `gitoxide` feature, use `swhid::git_gix`. Both modules expose the same functions: `revision_swhid`, `release_swhid`, `snapshot_swhid`, `open_repo`, `get_head_commit`, `get_tags`.
 
 ## CLI
 
@@ -24,7 +31,8 @@ With the `git` feature, use `swhid::git` to compute revision, release, and snaps
 
 1. **From crates.io**  
    `cargo install swhid`  
-   With Git support: `cargo install swhid --features git`
+   With Git support (libgit2): `cargo install swhid --features git`  
+   With Git support (gitoxide): `cargo install swhid --features gitoxide`
 
 2. **From source**  
    `cargo run --bin swhid -- [args...]` or `cargo build --release && ./target/release/swhid [args...]`
@@ -89,7 +97,7 @@ println!("Qualified SWHID: {}", qualified);
 # Ok::<_, Box<dyn std::error::Error>>(())
 ```
 
-### VCS integration (Git feature)
+### VCS integration (git feature — libgit2)
 
 ```rust,no_run
 use std::path::PathBuf;
@@ -104,6 +112,24 @@ use std::path::PathBuf;
     let tag_oid = repo.refname_to_id("refs/tags/v1.0.0")?;
     let release_swhid = git::release_swhid(&repo, &tag_oid)?;
     let snapshot_swhid = git::snapshot_swhid(&repo)?;
+}
+
+# Ok::<_, Box<dyn std::error::Error>>(())
+```
+
+### VCS integration (gitoxide feature)
+
+```rust,no_run
+use std::path::PathBuf;
+
+#[cfg(feature = "gitoxide")]
+{
+    use swhid::git_gix;
+
+    let repo = git_gix::open_repo(&PathBuf::from("/path/to/git/repo"))?;
+    let head_commit = git_gix::get_head_commit(&repo)?;
+    let revision_swhid = git_gix::revision_swhid(&repo, &head_commit, &mut std::collections::HashMap::new())?;
+    let snapshot_swhid = git_gix::snapshot_swhid(&repo)?;
 }
 
 # Ok::<_, Box<dyn std::error::Error>>(())
@@ -125,7 +151,7 @@ swhid dir --exclude .tmp --exclude .log /path/to/project
 swhid parse 'swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391'
 swhid verify README.md 'swh:1:cnt:...'
 
-# Git (requires --features git)
+# Git (requires --features git or --features gitoxide)
 swhid git revision /path/to/git/repo [COMMIT]
 swhid git release /path/to/git/repo v1.0.0
 swhid git snapshot /path/to/git/repo
@@ -134,7 +160,10 @@ swhid git tags /path/to/git/repo
 
 ## Cargo features
 
-| Feature | Description |
-|---------|-------------|
-| `git` | VCS integration for revision, release, and snapshot SWHID computation |
-| `serde` | `Serialize`/`Deserialize` for public types |
+| Feature | Backend | Description |
+|---------|---------|-------------|
+| `git` | libgit2 | VCS integration for revision, release, and snapshot SWHIDs |
+| `gitoxide` | gix | Same VCS integration, pure-Rust backend |
+| `serde` | — | `Serialize`/`Deserialize` for public types |
+
+Both `git` and `gitoxide` provide the same SWHID computation for revision, release, and snapshot objects. They differ only in the underlying Git library. When both features are enabled, `git` (libgit2) takes priority in the CLI.

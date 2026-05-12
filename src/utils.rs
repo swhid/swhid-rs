@@ -40,6 +40,27 @@ impl HeaderWriter {
     }
 }
 
+/// Build a SWHID-format signature tuple from raw parts.
+///
+/// Used by both `git` (libgit2) and `git_gix` (gitoxide) backends.
+pub(crate) fn build_signature(
+    name: &[u8],
+    email: &[u8],
+    timestamp: i64,
+    offset: &str,
+) -> (Box<[u8]>, i64, Box<[u8]>) {
+    let mut full_name = Vec::with_capacity(name.len() + email.len() + 3);
+    full_name.extend_from_slice(name);
+    full_name.extend_from_slice(b" <");
+    full_name.extend_from_slice(email);
+    full_name.push(b'>');
+    (
+        full_name.into(),
+        timestamp,
+        offset.as_bytes().to_vec().into_boxed_slice(),
+    )
+}
+
 /// Returns `Err(item)` if the `item` is present twice in a row.
 pub(crate) fn check_unique<T: AsRef<[u8]>>(items: impl IntoIterator<Item = T>) -> Result<(), T> {
     let mut items = items.into_iter();
