@@ -31,10 +31,13 @@ enum Command {
         #[arg(short, long)]
         file: Option<PathBuf>,
     },
-    /// Compute a directory SWHID recursively
+    /// Compute a directory SWHID from a filesystem tree
     Dir {
         /// Directory root
         path: PathBuf,
+        /// Output SWHIDs for all contained files and directories
+        #[arg(short = 'R', long)]
+        recursive: bool,
         /// Follow symlinks (not recommended)
         #[arg(long)]
         follow_symlinks: bool,
@@ -159,6 +162,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::Dir {
             path,
+            recursive,
             follow_symlinks,
             exclude,
             permissions_source,
@@ -185,8 +189,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             let dir = DiskDirectoryBuilder::new(&path).with_build_options(build_opts);
-            let swhid = dir.swhid()?;
-            println!("{swhid}");
+            if recursive {
+                for entry in dir.recursive_swhids()? {
+                    println!("{}\t{}", entry.swhid, entry.path.display());
+                }
+            } else {
+                let swhid = dir.swhid()?;
+                println!("{swhid}");
+            }
         }
         Command::Parse { swhid } => {
             // Try qualified first, fallback to core

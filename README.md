@@ -20,7 +20,7 @@ This implementation is **fully compliant** with SWHID v1.2 and provides:
 
 **Library:** `Content::from_bytes(b"data").swhid()` -> `swh:1:cnt:<hex>`. Parse with `"swh:1:cnt:...".parse::<Swhid>()`.
 
-**CLI:** `swhid content --file README.md` · `swhid dir .` · `swhid parse "swh:1:cnt:..."` · `swhid verify PATH SWHID`
+**CLI:** `swhid content --file README.md` · `swhid dir .` · `swhid dir -R .` · `swhid parse "swh:1:cnt:..."` · `swhid verify PATH SWHID`
 
 See the [user guide](docs/user-guide.md) for full documentation.
 

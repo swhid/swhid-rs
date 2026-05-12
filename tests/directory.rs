@@ -2,6 +2,7 @@ use assert_fs::prelude::*;
 
 use swhid::directory::*;
 use swhid::hash::hash_content;
+use swhid::Content;
 use swhid::ObjectType;
 
 fn name(s: &'static str) -> Box<[u8]> {
@@ -181,6 +182,45 @@ fn read_nested_dir_structure() {
     let dir = DiskDirectoryBuilder::new(tmp.path());
     let id = dir.swhid().unwrap();
     assert_eq!(id.object_type(), ObjectType::Directory);
+}
+
+#[test]
+fn rec_dir_swhids() {
+    let tmp = assert_fs::TempDir::new().unwrap();
+    tmp.child("a.txt").write_str("A").unwrap();
+    tmp.child("subdir").create_dir_all().unwrap();
+    tmp.child("subdir/b.txt").write_str("B").unwrap();
+
+    let root_swhid = DiskDirectoryBuilder::new(tmp.path()).swhid().unwrap();
+    let subdir_swhid = DiskDirectoryBuilder::new(&tmp.path().join("subdir"))
+        .swhid()
+        .unwrap();
+
+    let entries = DiskDirectoryBuilder::new(tmp.path())
+        .recursive_swhids()
+        .unwrap();
+
+    assert_eq!(
+        entries,
+        vec![
+            PathEntry {
+                path: ".".into(),
+                swhid: root_swhid,
+            },
+            PathEntry {
+                path: "a.txt".into(),
+                swhid: Content::from_bytes(b"A").swhid(),
+            },
+            PathEntry {
+                path: "subdir".into(),
+                swhid: subdir_swhid,
+            },
+            PathEntry {
+                path: "subdir/b.txt".into(),
+                swhid: Content::from_bytes(b"B").swhid(),
+            },
+        ]
+    );
 }
 
 #[test]

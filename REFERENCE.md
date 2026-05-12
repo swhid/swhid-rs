@@ -501,9 +501,10 @@ Computes content SWHID from file or stdin.
 #### Directory Command  
 ```bash
 swhid dir /path/to/directory
-swhid dir --exclude-suffix .tmp --exclude-suffix .log .
+swhid dir -R /path/to/directory
+swhid dir --exclude .tmp --exclude .log .
 ```
-Computes directory SWHID with optional exclusions.
+Computes a directory SWHID, or with `-R/--recursive` prints `SWHID<TAB>PATH` for the root directory and all contained files and directories.
 
 #### Parse Command
 ```bash
@@ -589,4 +590,3 @@ The architecture supports several extension points:
 5. **New CLI Commands**: Add subcommands to the CLI interface
 
 This reference implementation provides a solid foundation for understanding and extending SWHID functionality while maintaining strict compliance with the SWHID v1.2 specification.
-
