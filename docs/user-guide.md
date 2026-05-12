@@ -35,7 +35,7 @@ With the `git` feature, use `swhid::git` to compute revision, release, and snaps
 ### Commands
 
 - **Content:** `swhid content [--file PATH]` — read from file or stdin, print SWHID.
-- **Directory:** `swhid dir PATH [options]` — compute directory SWHID (see `--help` for walk and permission options).
+- **Directory:** `swhid dir PATH [options]` — compute a directory SWHID, or with `-R/--recursive` print `SWHID<TAB>PATH` for the root directory and all contained files and directories.
 - **Parse:** `swhid parse "swh:1:cnt:..."`
 - **Verify:** `swhid verify PATH SWHID` — compute SWHID for path and compare to given SWHID.
 - **Git** (with `git` feature): `swhid git revision REPO [COMMIT]`, `swhid git release REPO TAG`, `swhid git snapshot REPO`, `swhid git tags REPO`.
@@ -118,6 +118,7 @@ echo "Hello, World!" | swhid content
 
 # Directory
 swhid dir .
+swhid dir -R .
 swhid dir --exclude .tmp --exclude .log /path/to/project
 
 # Parse and verify
