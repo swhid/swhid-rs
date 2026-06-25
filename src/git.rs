@@ -496,6 +496,59 @@ pub fn release_from_git(repo: &Repository, tag_oid: &git2::Oid) -> Result<Releas
     }
 }
 
+/// Parsed extra headers (e.g. `gpgsig`) and optional message from a raw Git object.
+type ExtraHeadersAndMessage = (Vec<(Bytestring, Bytestring)>, Option<Bytestring>);
+
+/// Extract extra headers and message from a raw Git tag object.
+///
+/// Per SWHID spec §5.5 the release serialization must include any extra headers
+/// (notably the `gpgsig` GPG signature) that git2 does not expose through its tag
+/// API. We read the raw object from the object database and parse it by hand,
+/// returning `(extra_headers, message)`. The message is taken directly from the
+/// raw object so the serialized bytes match exactly.
+fn extract_tag_extra_headers_and_message(
+    repo: &Repository,
+    tag_oid: git2::Oid,
+) -> Result<ExtraHeadersAndMessage, SwhidError> {
+    let odb = repo
+        .odb()
+        .map_err(|e| io_error(format!("Failed to get object database: {e}")))?;
+    let odb_obj = odb
+        .read(tag_oid)
+        .map_err(|e| io_error(format!("Failed to read tag object: {e}")))?;
+
+    // OdbObject::data() is the decompressed object body. Loose objects may carry a
+    // "tag <len>\0" header; packed objects do not. Strip the header if present.
+    let raw_data = odb_obj.data();
+    let content = match raw_data.iter().position(|&b| b == 0) {
+        Some(null_pos) => &raw_data[null_pos + 1..],
+        None => raw_data,
+    };
+
+    // Tag format: object/type/tag/tagger headers, then extra headers (gpgsig, …),
+    // a blank line, then the message. Split header block from message at the first
+    // true empty line; a blank line *inside* a gpgsig PGP armor is a continuation
+    // line (" \n"), not "\n\n", so this boundary is unambiguous. `parse_header`
+    // expects the header block only and rejects a trailing empty line.
+    let (header_bytes, message) = match content.windows(2).position(|w| w == b"\n\n") {
+        Some(pos) => {
+            let msg = &content[pos + 2..];
+            let message = (!msg.is_empty()).then(|| msg.into());
+            (&content[..=pos], message)
+        }
+        None => (content, None),
+    };
+
+    let headers = parse_header(header_bytes)?;
+    let extra_headers: Vec<(Bytestring, Bytestring)> = headers
+        .into_iter()
+        .filter(|(key, _)| !matches!(*key, b"object" | b"type" | b"tag" | b"tagger"))
+        .map(|(key, value)| (key.into(), value))
+        .collect();
+
+    Ok((extra_headers, message))
+}
+
 fn release_from_git_impl<const N: usize>(
     repo: &Repository,
     tag_oid: &git2::Oid,
@@ -541,6 +594,10 @@ fn release_from_git_impl<const N: usize>(
         None => (None, None, None),
     };
 
+    // Extra headers (e.g. gpgsig) and message are read from the raw tag object,
+    // since git2 does not expose extra headers through its tag API (SWHID §5.5).
+    let (extra_headers, message) = extract_tag_extra_headers_and_message(repo, *tag_oid)?;
+
     Ok(Release {
         object,
         object_type,
@@ -548,8 +605,8 @@ fn release_from_git_impl<const N: usize>(
         author,
         author_timestamp,
         author_timestamp_offset,
-        extra_headers: Vec::new(), // FIXME: does not seem to be exposed by git2
-        message: tag.message_bytes().map(Into::into),
+        extra_headers,
+        message,
     })
 }
 
@@ -652,6 +709,10 @@ where
         None => (None, None, None),
     };
 
+    // Extra headers (e.g. gpgsig) and message are read from the raw tag object,
+    // since git2 does not expose extra headers through its tag API (SWHID §5.5).
+    let (extra_headers, message) = extract_tag_extra_headers_and_message(repo, *tag_oid)?;
+
     Ok(Release {
         object,
         object_type,
@@ -659,8 +720,8 @@ where
         author,
         author_timestamp,
         author_timestamp_offset,
-        extra_headers: Vec::new(),
-        message: tag.message_bytes().map(Into::into),
+        extra_headers,
+        message,
     })
 }
 

@@ -286,6 +286,74 @@ fn test_release_swhid() {
 }
 
 #[test]
+fn test_signed_release_swhid() {
+    use git2::ObjectType as GitObjectType;
+    let tmp = assert_fs::TempDir::new().unwrap();
+    let repo = Repository::init(tmp.path()).unwrap();
+
+    // Create content + tree (same fixture as test_release_swhid)
+    let mut index = repo.index().unwrap();
+    let file_path = tmp.child("test.txt");
+    file_path.write_str("test content").unwrap();
+    index
+        .add_path(file_path.path().strip_prefix(tmp.path()).unwrap())
+        .unwrap();
+    let tree_oid = index.write_tree().unwrap();
+    let tree_hash: [u8; 20] = hex::decode("0efb37b28c53c7e4fbd253bb04a4df14008f63fe")
+        .unwrap()
+        .try_into()
+        .unwrap();
+    assert_eq!(oid_to_array(tree_oid), tree_hash);
+
+    // git2 has no signed-tag API, so write the raw annotated tag object by hand.
+    // gpgsig continuation lines are space-prefixed; `parse_header` unfolds them back
+    // to the original multi-line signature. Identical tree/name/tagger/message to
+    // test_release_swhid, plus a gpgsig extra header. `concat!` is used (not `\`-newline
+    // continuation) so the leading continuation spaces are preserved verbatim.
+    let raw_tag = concat!(
+        "object 0efb37b28c53c7e4fbd253bb04a4df14008f63fe\n",
+        "type tree\n",
+        "tag v1.0\n",
+        "tagger Test User <test@example.com> 1763027354 +0100\n",
+        "gpgsig -----BEGIN PGP SIGNATURE-----\n",
+        " blah blah blah\n",
+        " -----END PGP SIGNATURE-----\n",
+        "\n",
+        "Test tag",
+    );
+    let tag_oid = repo
+        .odb()
+        .unwrap()
+        .write(GitObjectType::Tag, raw_tag.as_bytes())
+        .unwrap();
+
+    let gpgsig = "-----BEGIN PGP SIGNATURE-----\nblah blah blah\n-----END PGP SIGNATURE-----";
+    let rel = release_from_git(&repo, &tag_oid).unwrap();
+    assert_eq!(
+        rel,
+        Release {
+            object: Digest::from(tree_hash),
+            object_type: ReleaseTargetType::Directory,
+            name: bs("v1.0"),
+            author: Some(bs("Test User <test@example.com>")),
+            author_timestamp: Some(1763027354),
+            author_timestamp_offset: Some(bs("+0100")),
+            extra_headers: vec![(bs("gpgsig"), bs(gpgsig))],
+            message: Some(bs("Test tag")),
+        }
+    );
+
+    // The gpgsig extra header must actually enter the manifest: the signed release
+    // SWHID differs from the otherwise-identical unsigned release in test_release_swhid.
+    let swhid = release_swhid(&repo, &tag_oid).unwrap();
+    assert!(swhid.to_string().starts_with("swh:1:rel:"));
+    assert_ne!(
+        swhid.to_string(),
+        "swh:1:rel:46d326edb8bfc49b757ccd09930365595806bfc0"
+    );
+}
+
+#[test]
 fn test_snapshot_swhid() {
     let tmp = assert_fs::TempDir::new().unwrap();
     let repo = Repository::init(tmp.path()).unwrap();

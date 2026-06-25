@@ -97,6 +97,44 @@ impl Swhid {
             encoder.encode(self.digest_bytes())
         )
     }
+
+    /// Parse a SWHID whose digest is encoded with the given serializer.
+    ///
+    /// The canonical [`FromStr`] / [`Display`] form uses hex; this is the inverse of
+    /// [`to_string_encoded`](Self::to_string_encoded) for non-hex encodings (base64url,
+    /// base32, z85, …). The version and object type are read from the string; the digest
+    /// is decoded with `encoder` and validated by length via [`Digest::from_bytes`].
+    pub fn parse_with<E: DigestSerializer>(s: &str, encoder: &E) -> Result<Self, SwhidError> {
+        // Expect: swh:<version>:<tag>:<digest>
+        let mut it = s.split(':');
+        let scheme = it
+            .next()
+            .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
+        if scheme != "swh" {
+            return Err(SwhidError::InvalidScheme(scheme.to_owned()));
+        }
+        let ver = it
+            .next()
+            .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
+        let version = match ver {
+            "1" => SwhidVersion::V1,
+            "2" => SwhidVersion::V2,
+            _ => return Err(SwhidError::InvalidVersion(ver.to_owned())),
+        };
+        let tag = it
+            .next()
+            .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
+        let object_type = ObjectType::from_tag(tag)?;
+        let digest_str = it
+            .next()
+            .ok_or_else(|| SwhidError::InvalidFormat(s.to_owned()))?;
+        if it.next().is_some() {
+            return Err(SwhidError::InvalidFormat(s.to_owned()));
+        }
+        let raw = encoder.decode(digest_str)?;
+        let digest = Digest::from_bytes(raw)?;
+        Ok(Swhid::new(object_type, digest, version))
+    }
 }
 
 impl Display for Swhid {
@@ -580,5 +618,67 @@ mod tests {
         assert!("swh:1:cnt:e69de29bb2d1d6434b8b29ae775ad8c2e48c5391\t"
             .parse::<Swhid>()
             .is_err());
+    }
+
+    /// A representative 32-byte (SHA-256-sized) v2 digest for round-trip tests.
+    #[cfg(any(
+        feature = "encoding-base64url",
+        feature = "encoding-base32",
+        feature = "encoding-z85"
+    ))]
+    fn sample_v2_swhid() -> Swhid {
+        let bytes: Vec<u8> = (0u8..32).collect();
+        let digest = Digest::from_bytes(bytes).unwrap();
+        Swhid::new(ObjectType::Content, digest, SwhidVersion::V2)
+    }
+
+    #[cfg(feature = "encoding-base64url")]
+    #[test]
+    fn parse_with_roundtrip_base64url() {
+        use crate::serialization::Base64UrlSerializer;
+        let enc = Base64UrlSerializer;
+        let swhid = sample_v2_swhid();
+        let s = swhid.to_string_encoded(&enc);
+        assert!(s.starts_with("swh:2:cnt:"));
+        assert_ne!(s, swhid.to_string()); // differs from canonical hex
+        let parsed = Swhid::parse_with(&s, &enc).unwrap();
+        assert_eq!(parsed, swhid);
+    }
+
+    #[cfg(feature = "encoding-base32")]
+    #[test]
+    fn parse_with_roundtrip_base32() {
+        use crate::serialization::Base32Serializer;
+        let enc = Base32Serializer;
+        let swhid = sample_v2_swhid();
+        let s = swhid.to_string_encoded(&enc);
+        let parsed = Swhid::parse_with(&s, &enc).unwrap();
+        assert_eq!(parsed, swhid);
+    }
+
+    #[cfg(feature = "encoding-z85")]
+    #[test]
+    fn parse_with_roundtrip_z85() {
+        use crate::serialization::Z85Serializer;
+        let enc = Z85Serializer;
+        let swhid = sample_v2_swhid();
+        let s = swhid.to_string_encoded(&enc);
+        let parsed = Swhid::parse_with(&s, &enc).unwrap();
+        assert_eq!(parsed, swhid);
+    }
+
+    #[cfg(feature = "encoding-base64url")]
+    #[test]
+    fn parse_with_rejects_malformed() {
+        use crate::serialization::Base64UrlSerializer;
+        let enc = Base64UrlSerializer;
+        // too many parts
+        assert!(Swhid::parse_with("swh:2:cnt:AAAA:extra", &enc).is_err());
+        // bad scheme
+        assert!(Swhid::parse_with("xyz:2:cnt:AAAA", &enc).is_err());
+        // bad version
+        assert!(Swhid::parse_with("swh:9:cnt:AAAA", &enc).is_err());
+        // unknown object type
+        assert!(Swhid::parse_with("swh:2:xxx:AAAA", &enc).is_err());
     }
 }
