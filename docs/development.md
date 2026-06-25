@@ -49,6 +49,8 @@ CI (`.github/workflows/rust.yml`) runs format check, clippy, and tests with defa
 
 The branch introduces type-level hash and encoding (no runtime dispatch): `Digest` enum, `HashConfig<H, E>`, and `swhid_with_config` across content, directory, revision, release, snapshot, and git. Default behaviour remains v1 (SHA-1 + hex).
 
+This is the single canonical v2 trunk. Two earlier v2 explorations — `v2-exploration` (runtime `Box<dyn>` dispatch) and `v2-plugins` (a pluggable-trait pipeline) — were alternative redesigns of the same hash/serialization/config subsystem; their worthwhile pieces (non-hex `Swhid::parse_with`, raw-tag `gpgsig` extra-header extraction, the `docs/design/` spec notes) have been folded in here, and the branches are retained only as the `archive/v2-exploration`, `archive/v2-exploration-backup`, and `archive/v2-plugins` tags.
+
 ### Architecture summary
 
 - **Type-level H and E:** Hash and encoder are fixed at the call site via `HashConfig<H, E>`. No `dyn`; no runtime branch on hash or encoding in the hot path.
