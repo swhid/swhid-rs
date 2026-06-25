@@ -89,6 +89,15 @@ impl Entry {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// A recursively discovered filesystem path with its SWHID.
+pub struct PathEntry {
+    /// Object path, relative to the builder root. The root directory itself is `"."`.
+    pub path: PathBuf,
+    /// SWHID of the object at this path.
+    pub swhid: Swhid,
+}
+
 impl From<ManifestEntry> for Entry {
     fn from(manifest: ManifestEntry) -> Self {
         let id = match Digest::from_bytes(manifest.target.clone()) {
@@ -318,19 +327,17 @@ where
     Ok(children)
 }
 
-fn read_dir(
-    path: &Path,
+fn permission_source_for(
     root: &Path,
     opts: &DirectoryBuildOptions,
-) -> Result<Vec<Entry>, crate::error::SwhidError> {
+) -> Result<Box<dyn PermissionsSource>, crate::error::SwhidError> {
     use crate::permissions::{
         AutoPermissionsSource, FilesystemPermissionsSource, ManifestPermissionsSource,
     };
     #[cfg(feature = "git")]
     use crate::permissions::{GitIndexPermissionsSource, GitTreePermissionsSource};
 
-    // Create permission source based on options
-    let permission_source: Box<dyn PermissionsSource> = match opts.permissions_source {
+    Ok(match opts.permissions_source {
         PermissionsSourceKind::Auto => Box::new(AutoPermissionsSource::new(root)?),
         PermissionsSourceKind::Filesystem => Box::new(FilesystemPermissionsSource),
         #[cfg(feature = "git")]
@@ -371,7 +378,44 @@ fn read_dir(
             // Heuristic not implemented yet, fall back to filesystem
             Box::new(FilesystemPermissionsSource)
         }
-    };
+    })
+}
+
+/// Collect SWHIDs recursively during directory traversal.
+trait SwhidCollector {
+    fn push(&mut self, path: PathBuf, swhid: Swhid);
+}
+
+#[derive(Default)]
+/// Null SWHID collector, i.e., a "collector" that throws away all SWHIDs pushed to it.
+/// Used for non-recursive SWHID display.
+struct NullSwhidCollector;
+
+impl SwhidCollector for NullSwhidCollector {
+    fn push(&mut self, _path: PathBuf, _swhid: Swhid) {}
+}
+
+impl SwhidCollector for Vec<PathEntry> {
+    fn push(&mut self, path: PathBuf, swhid: Swhid) {
+        self.push(PathEntry { path, swhid });
+    }
+}
+
+fn local_path(root: &Path, path: &Path) -> PathBuf {
+    path.strip_prefix(root).unwrap_or(path).to_path_buf()
+}
+
+fn build_directory(entries: Vec<Entry>) -> Result<Directory, crate::error::SwhidError> {
+    Directory::new(entries).map_err(|e| crate::error::SwhidError::Io(std::io::Error::other(e)))
+}
+
+fn read_dir_with_permission_source<C: SwhidCollector>(
+    path: &Path,
+    root: &Path,
+    opts: &DirectoryBuildOptions,
+    permission_source: &dyn PermissionsSource,
+    collector: &mut C,
+) -> Result<Vec<Entry>, crate::error::SwhidError> {
     let mut children: Vec<Entry> = Vec::new();
     for entry in fs::read_dir(path).map_err(|e| {
         crate::error::SwhidError::Io(std::io::Error::other(format!(
@@ -413,14 +457,16 @@ fn read_dir(
         let ft = md.file_type();
 
         if ft.is_dir() {
-            let nested_entries = read_dir(&entry.path(), root, opts)?;
-            let manifest = dir_manifest(nested_entries).map_err(|e: DirectoryError| {
-                crate::error::SwhidError::Io(std::io::Error::other(format!(
-                    "Failed to build directory manifest: {}",
-                    e
-                )))
-            })?;
-            let id = Digest::from(hash_swhid_object("tree", &manifest));
+            let nested_entries = read_dir_with_permission_source(
+                &entry.path(),
+                root,
+                opts,
+                permission_source,
+                collector,
+            )?;
+            let nested_swhid = build_directory(nested_entries)?.swhid()?;
+            let id = nested_swhid.digest().clone();
+            collector.push(local_path(root, &entry.path()), nested_swhid);
             children.push(Entry {
                 name: name_bytes,
                 mode: 0o040000,
@@ -436,7 +482,12 @@ fn read_dir(
                 )))
             })?;
             let bytes = target.as_os_str().as_encoded_bytes();
-            let id = Digest::from(hash_content(bytes));
+            let raw = hash_content(bytes);
+            let id = Digest::from(raw);
+            collector.push(
+                local_path(root, &entry.path()),
+                Swhid::new_v1(ObjectType::Content, raw),
+            );
             children.push(Entry {
                 name: name_bytes,
                 mode: symlink_mode(),
@@ -450,7 +501,12 @@ fn read_dir(
                     e
                 )))
             })?;
-            let id = Digest::from(hash_content(&bytes));
+            let raw = hash_content(&bytes);
+            let id = Digest::from(raw);
+            collector.push(
+                local_path(root, &entry.path()),
+                Swhid::new_v1(ObjectType::Content, raw),
+            );
 
             // Use permission source to determine executable bit
             let exec = permission_source.executable_of(&entry.path())?;
@@ -468,6 +524,16 @@ fn read_dir(
         }
     }
     Ok(children)
+}
+
+fn read_dir(
+    path: &Path,
+    root: &Path,
+    opts: &DirectoryBuildOptions,
+) -> Result<Vec<Entry>, crate::error::SwhidError> {
+    let permission_source = permission_source_for(root, opts)?;
+    let mut collector = NullSwhidCollector;
+    read_dir_with_permission_source(path, root, opts, permission_source.as_ref(), &mut collector)
 }
 
 /// SWHID v1.2 directory object for computing directory SWHIDs.
@@ -567,7 +633,7 @@ impl<'a> DiskDirectoryBuilder<'a> {
 
     pub fn build(self) -> Result<Directory, crate::error::SwhidError> {
         let entries = read_dir(self.root, self.root, &self.opts)?;
-        Directory::new(entries).map_err(|e| crate::error::SwhidError::Io(std::io::Error::other(e)))
+        build_directory(entries)
     }
 
     /// Build a directory using the configured hash for all child object IDs.
@@ -591,8 +657,29 @@ impl<'a> DiskDirectoryBuilder<'a> {
     /// is compatible with Git's tree format for directory objects.
     pub fn swhid(&self) -> Result<Swhid, crate::error::SwhidError> {
         let entries = read_dir(self.root, self.root, &self.opts)?;
-        Directory::new(entries)
-            .map_err(|e| crate::error::SwhidError::Io(std::io::Error::other(e)))?
-            .swhid()
+        build_directory(entries)?.swhid()
+    }
+
+    /// Compute the SWHIDs of all contained files and directories recursively.
+    ///
+    /// Returned paths are relative to the builder root. The root directory itself
+    /// is represented as `"."`.
+    pub fn recursive_swhids(&self) -> Result<Vec<PathEntry>, crate::error::SwhidError> {
+        let permission_source = permission_source_for(self.root, &self.opts)?;
+        let mut recursive_swhids = Vec::new();
+        let entries = read_dir_with_permission_source(
+            self.root,
+            self.root,
+            &self.opts,
+            permission_source.as_ref(),
+            &mut recursive_swhids,
+        )?;
+        let root_swhid = build_directory(entries)?.swhid()?;
+        recursive_swhids.push(PathEntry {
+            path: PathBuf::from("."),
+            swhid: root_swhid,
+        });
+        recursive_swhids.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+        Ok(recursive_swhids)
     }
 }

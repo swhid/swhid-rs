@@ -11,10 +11,10 @@ env:
 
 on:
   push:
-    branches: [main,v2-typespecialisation]
+    branches: [main, v2-typespecialisation]
     tags: ["v*"]
   pull_request:
-    branches: [main,v2-typespecialisation]
+    branches: [main, v2-typespecialisation]
   workflow_dispatch:
     inputs:
       tag:

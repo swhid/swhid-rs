@@ -9,6 +9,8 @@ use swhid::{
 use swhid::{HashConfig, QualifiedSwhid, Swhid};
 
 #[cfg(feature = "git")]
+use std::collections::HashMap;
+#[cfg(feature = "git")]
 use swhid::git;
 
 /// Small CLI for the SWHID reference implementation
@@ -39,10 +41,13 @@ enum Command {
         #[arg(short, long)]
         file: Option<PathBuf>,
     },
-    /// Compute a directory SWHID recursively
+    /// Compute a directory SWHID from a filesystem tree
     Dir {
         /// Directory root
         path: PathBuf,
+        /// Output SWHIDs for all contained files and directories
+        #[arg(short = 'R', long)]
+        recursive: bool,
         /// Follow symlinks (not recommended)
         #[arg(long)]
         follow_symlinks: bool,
@@ -1028,6 +1033,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         Command::Dir {
             path,
+            recursive,
             follow_symlinks,
             exclude,
             permissions_source,
@@ -1054,8 +1060,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             let builder = DiskDirectoryBuilder::new(&path).with_build_options(build_opts);
-            let s = compute_dir_swhid_string(builder, hash, format)?;
-            println!("{s}");
+            if recursive {
+                // Recursive display is v1 (SHA-1) only; --hash/--format do not apply.
+                for entry in builder.recursive_swhids()? {
+                    println!("{}\t{}", entry.swhid, entry.path.display());
+                }
+            } else {
+                let s = compute_dir_swhid_string(builder, hash, format)?;
+                println!("{s}");
+            }
         }
         Command::Parse { swhid } => {
             // Try qualified first, fallback to core

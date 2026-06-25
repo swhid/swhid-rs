@@ -4,12 +4,13 @@ This guide describes how to use the `swhid` library and CLI on the **v2-typespec
 
 ## SWHID v2 exploration
 
-This branch is part of the **SWHID v2 exploration** effort. Open questions include which hash algorithm (SHA-256 is a strong candidate, given Git’s roadmap) and which user-facing encoding to use. Internally, the Merkle graph is built on hex; for user convenience, we may prefer a more compact encoding (hex, base64url, base64, base32, base32hex, or z85). 
+This branch is part of the **SWHID v2 exploration** effort. Open questions include which hash algorithm (SHA-256 is a strong candidate, given Git’s roadmap) and which user-facing encoding to use. Internally, the Merkle graph is built on hex; for user convenience, we may prefer a more compact encoding (hex, base64url, base64, base32, base32hex, or z85).
+
 ## Library usage
 
-### Default (v1) SWHIDs
+### SWHID v1 identifiers
 
-By default, the library produces **SWHID v1** identifiers: SHA-1 digest, lowercase hex encoding, version `1` in the URI:
+The library produces **SWHID v1** identifiers: SHA-1 digest, lowercase hex encoding, version `1` in the URI.
 
 - **Content:** `Content::from_bytes(bytes).swhid()` -> `swh:1:cnt:<40 hex chars>`
 - **Directory:** `Directory::new(entries)?.swhid()?` or `DiskDirectoryBuilder::new(path).build()?.swhid()?`
@@ -42,6 +43,21 @@ let config_v2 = HashConfig::v2();
 
 Config constructors are feature-gated: `HashConfig::v1()`, `HashConfig::v2()`, `HashConfig::v2_hex()`, `HashConfig::v2_base64()`, `HashConfig::v2_base32()`, `HashConfig::v2_base32hex()`, `HashConfig::v2_z85()`, `HashConfig::sha512_hex()`, `HashConfig::sha512_base64url()`.
 
+### Parsing non-hex SWHIDs
+
+`Swhid::from_str` (and `parse::<Swhid>()`) decode the canonical hex form. To parse a SWHID whose digest is encoded with another serializer (base64url, base32, z85, …), use `Swhid::parse_with(s, &encoder)` — the inverse of `to_string_encoded`:
+
+```rust,no_run
+use swhid::Swhid;
+
+#[cfg(feature = "encoding-base64url")]
+{
+use swhid::serialization::Base64UrlSerializer;
+let swhid = Swhid::parse_with("swh:2:cnt:...", &Base64UrlSerializer)?;
+}
+# Ok::<_, Box<dyn std::error::Error>>(())
+```
+
 ### Git integration
 
 With the `git` feature, use `swhid::git` with config: `revision_swhid_with_config`, `release_swhid_with_config`, `snapshot_swhid_with_config`.
@@ -57,7 +73,7 @@ With the `git` feature, use `swhid::git` with config: `revision_swhid_with_confi
 2. **From source**
  `cargo run --bin swhid -- [args...]` or `cargo build --release && ./target/release/swhid [args...]`
 
-3. **Pre-built binaries**  
+3. **Pre-built binaries**
    CI builds binaries for Linux (x86_64), macOS (aarch64), and Windows (x86_64). Download from the latest [Release binaries](https://github.com/swhid/swhid-rs/actions/workflows/release-binaries.yml) run (Artifacts), or from [Releases](https://github.com/swhid/swhid-rs/releases).
 
    **Experimental binaries (this branch):** Pre-releases tagged `v2-exp-YYYYMMDD` (e.g. `v2-exp-20260301`) provide binaries with full v2 support (all hash/format combinations). They are named `swhid-v2-exp-<platform>` to distinguish them from stable v1 binaries. Stable releases use tags like `v0.2.3` and produce `swhid-<platform>`.
@@ -67,19 +83,14 @@ With the `git` feature, use `swhid::git` with config: `revision_swhid_with_confi
 ### Commands
 
 - **Content:** `swhid content [--file PATH]` — read from file or stdin, print SWHID.
-- **Directory:** `swhid dir PATH [options]` — compute directory SWHID (see `--help` for walk and permission options).
+- **Directory:** `swhid dir PATH [options]` — compute a directory SWHID (see `--help` for walk and permission options), or with `-R/--recursive` print `SWHID<TAB>PATH` for the root directory and all contained files and directories.
 - **Parse:** `swhid parse "swh:1:cnt:..."` or `swh:2:cnt:...`
 - **Verify:** `swhid verify PATH SWHID` — compute SWHID for path and compare to given SWHID.
 - **Git** (with `git` feature): `swhid git revision REPO [COMMIT]`, `swhid git release REPO TAG`, `swhid git snapshot REPO`, `swhid git tags REPO`.
 
-### Hash and format options
+## Examples
 
 Global options (apply to content, dir, verify, and git commands when set):
-
-- `--hash HASH`: `sha1`, `sha256`, or `sha512` (requires corresponding feature).
-- `--format FORMAT`: `hex`, `base64`, `base64url`, `base32`, `base32hex`, or `z85` (requires corresponding feature).
-
-Examples:
 
 - Default (v1): `swhid content` -> `swh:1:cnt:<hex>`
 - Explicit v1: `swhid --hash sha1 --format hex content`
@@ -88,9 +99,7 @@ Examples:
 - V2 with z85: `swhid --hash sha256 --format z85 content` (requires encoding-z85)
 - SHA-512: `swhid --hash sha512 --format hex content` (requires sha512)
 
-When using `--hash` and `--format`, **verify** compares the computed and expected strings in that encoding.
-
-## Examples
+When using `--hash` and `--format`, **verify** compares the computed and expected strings in that encoding. Recursive directory display (`swhid dir -R`) is v1 (SHA-1) only.
 
 ### Parsing a SWHID
 
@@ -190,6 +199,7 @@ swhid --hash sha256 --format hex content --file README.md
 
 # Directory
 swhid dir .
+swhid dir -R .                # recursive: SWHID<TAB>PATH for root and all entries
 swhid dir --exclude .tmp --exclude .log /path/to/project
 
 # Parse and verify
@@ -221,6 +231,7 @@ The dashboard is generated by the SWHID Testing Harness and is updated as new ru
 | `sha1`| SHA-1 hash (default) |
 | `sha256`| SHA-256 hash |
 | `sha512`| SHA-512 hash |
+| `blake3`| BLAKE3 hash |
 | `encoding-hex` | Hex encoding (default) |
 | `encoding-base64`| Base64 encoding|
 | `encoding-base64url` | Base64url encoding |

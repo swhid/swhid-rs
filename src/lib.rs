@@ -30,7 +30,7 @@ pub use config::HashConfig;
 pub use content::Content;
 pub use core::{ObjectType, Swhid};
 pub use digest::Digest;
-pub use directory::{Directory, DiskDirectoryBuilder, Entry, WalkOptions};
+pub use directory::{Directory, DiskDirectoryBuilder, Entry, PathEntry, WalkOptions};
 pub use directory::{DirectoryBuildOptions, ManifestEntry};
 pub use permissions::{
     resolve_file_permissions, EntryExec, EntryPerms, PermissionPolicy, PermissionsSource,

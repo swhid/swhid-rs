@@ -27,7 +27,7 @@ This implementation is **fully compliant** with SWHID v1.2 and on this branch al
 
 **Library (v2):** `content.swhid_with_config(&HashConfig::v2())` then `swhid.to_string_encoded(&config.encoder)` (requires `sha256` + `encoding-base64url`).
 
-**CLI:** `swhid content --file README.md` · `swhid --hash sha256 --format base64url content` · `swhid dir .` · `swhid parse "swh:1:cnt:..."`
+**CLI:** `swhid content --file README.md` · `swhid --hash sha256 --format base64url content` · `swhid dir .` · `swhid dir -R .` (recursive) · `swhid parse "swh:1:cnt:..."` · `swhid verify PATH SWHID`
 
 See the [user guide](docs/user-guide.md) for full documentation.
 

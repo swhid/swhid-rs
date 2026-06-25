@@ -18,9 +18,7 @@ impl<B: AsRef<[u8]>> Content<B> {
     ///
     /// This implements SWHID v1.2 content object creation for any byte data.
     pub fn from_bytes(bytes: B) -> Self {
-        Self {
-            bytes: bytes.into(),
-        }
+        Self { bytes }
     }
 
     pub fn as_bytes(&self) -> &[u8] {
