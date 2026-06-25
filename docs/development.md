@@ -11,10 +11,40 @@ This document describes how to work on the `swhid-rs` codebase: layout, testing,
 - **`src/serialization/`** — `DigestSerializer`, `HexSerializer`, `Base64Serializer`, `Base64UrlSerializer`, `Base32Serializer`, `Base32HexSerializer`, `Z85Serializer`.
 - **`src/hash/`** — `HashFunction` trait, `swhid_object_header`, per-hash modules (`sha1`, `sha256`, `sha512`).
 - **`src/content.rs`** — `Content`, `swhid()` / `swhid_with_config()`.
-- **`src/directory.rs`** — `Entry`, `Directory`, `DiskDirectoryBuilder`, `dir_manifest`, `swhid()` / `swhid_with_config()`.
+- **`src/directory.rs`** — `Entry`, `Directory`, `DiskDirectoryBuilder`, `dir_manifest`, `swhid()` / `swhid_with_config()`, recursive display (`PathEntry`, `SwhidCollector`, `DiskDirectoryBuilder::recursive_swhids()`).
 - **`src/revision.rs`**, **`src/release.rs`**, **`src/snapshot.rs`** — manifest types and `swhid()` / `swhid_with_config()`.
 - **`src/git.rs`** — (optional) revision/release/snapshot from Git; `*_swhid_with_config` and helpers.
 - **`src/main.rs`** — CLI: content, dir, parse, verify, git; `--hash` / `--format` dispatch to config-based APIs.
+
+## Recursive directory traversal ordering (`swhid dir -R`)
+
+`DiskDirectoryBuilder::recursive_swhids()` returns `Vec<PathEntry>` (relative path + SWHID),
+which `swhid dir -R` prints as `SWHID<TAB>PATH`. The output order is **not** the traversal
+order — it is produced by a single sort at the end of `recursive_swhids()`:
+
+```rust
+recursive_swhids.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+```
+
+Implications when modifying this code:
+
+- **The traversal order is irrelevant.** `read_dir_with_permission_source` recurses into a
+  directory before pushing the directory itself (post-order) and visits a directory's entries
+  in raw `fs::read_dir` order (OS-dependent, unsorted). The final sort overrides both, so the
+  result is deterministic regardless of filesystem enumeration order (paths are distinct, so
+  `sort_unstable` ties never occur).
+- **Top-to-bottom (pre-order) is a property of the sort key, not the walk.** The key is a
+  `PathBuf`, and `Path::cmp` compares **component-by-component**, not as a flat byte string.
+  Because a directory's path is a prefix of its children's, each directory sorts immediately
+  above its whole subtree, and siblings group together — equivalent to a pre-order DFS with
+  siblings visited in sorted order. The root is appended as `"."` and sorts first.
+- **Why component-wise matters:** a sibling like `src-extra` must sort *after* the entire
+  `src/` subtree, not between `src` and `src/a.rs`. A naive byte-string sort would place it
+  in the middle (since `-` 0x2D < `/` 0x2F); `Path::cmp` avoids this. If you ever switch the
+  comparator (e.g. to sort on `path.to_string_lossy()`), this invariant breaks.
+
+To change the ordering (e.g. files-before-directories, or directory-grouped with indentation
+derived from `path.components().count()`), edit only this comparator.
 
 ## Testing
 
