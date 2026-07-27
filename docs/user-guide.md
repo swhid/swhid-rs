@@ -4,6 +4,15 @@ This guide describes how to use the `swhid` library and CLI for computing and pa
 
 ## Library usage
 
+Library consumers can skip the CLI and its clap dependency tree:
+
+```toml
+[dependencies]
+swhid = { version = "0.2", default-features = false }
+```
+
+The default features include `cli` (the `swhid` binary), which is what `cargo install swhid` builds.
+
 ### SWHID v1 identifiers
 
 The library produces **SWHID v1** identifiers: SHA-1 digest, lowercase hex encoding, version `1` in the URI.

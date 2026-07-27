@@ -9,7 +9,9 @@ keywords = ["swhid", "iso18670", "software-heritage", "identifier", "hash"]
 categories = ["encoding", "data-structures", "parsing"]
 
 [features]
-default = []
+# The default features carry the `swhid` CLI (what `cargo install swhid` builds); library consumers opt out with `default-features = false` and skip clap entirely.
+default = ["cli"]
+cli = ["dep:clap"]
 serde = ["dep:serde"]
 git = ["dep:git2"]
 
@@ -18,9 +20,14 @@ hex = "0.4"
 thiserror = "1"
 percent-encoding = "2"
 serde = { version = "1", features = ["derive"], optional = true }
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive"], optional = true }
 sha1collisiondetection = { version = "0.3" }
 git2 = { version = "0.20", optional = true }
+
+[[bin]]
+name = "swhid"
+path = "src/main.rs"
+required-features = ["cli"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
