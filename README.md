@@ -20,6 +20,15 @@ This implementation is **fully compliant** with SWHID v1.2 and provides:
 
 **Library:** `Content::from_bytes(b"data").swhid()` -> `swh:1:cnt:<hex>`. Parse with `"swh:1:cnt:...".parse::<Swhid>()`.
 
+Library consumers can skip the CLI and its clap dependency tree:
+
+```toml
+[dependencies]
+swhid = { version = "0.2", default-features = false }
+```
+
+The default features include `cli` (the `swhid` binary), which is what `cargo install swhid` builds.
+
 **CLI:** `swhid content --file README.md` · `swhid dir .` · `swhid dir -R .` · `swhid parse "swh:1:cnt:..."` · `swhid verify PATH SWHID`
 
 See the [user guide](docs/user-guide.md) for full documentation.
