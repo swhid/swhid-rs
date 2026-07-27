@@ -149,7 +149,9 @@ impl QualifiedSwhid {
     }
 }
 
-const ESCAPED: &AsciiSet = &AsciiSet::EMPTY.add(b';');
+// Spec section 4: `;` and `%` must be percent-encoded in origin and path values; `%` first
+// escapes the escape character itself, so every decoded value survives a display/parse cycle.
+const ESCAPED: &AsciiSet = &AsciiSet::EMPTY.add(b'%').add(b';');
 
 impl Display for QualifiedSwhid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -296,6 +298,26 @@ mod tests {
 
         let parsed: QualifiedSwhid = s.parse().unwrap();
         assert_eq!(parsed.core(), &core);
+    }
+
+    #[test]
+    fn percent_and_semicolon_in_origin_and_path_round_trip() {
+        // Spec section 4: all occurrences of `;` and `%` in origin and path values travel
+        // percent-encoded (`%3B`, `%25`), so decoded values containing them must re-encode.
+        let core: Swhid = "swh:1:cnt:b45ef6fec89518d314f546fd6c3025367b721684"
+            .parse()
+            .unwrap();
+        let q = QualifiedSwhid::new(core)
+            .with_origin("https://example.org/a%20b.git")
+            .with_path("/dir;name/50%.rs");
+        let s = q.to_string();
+        assert_eq!(
+            s,
+            "swh:1:cnt:b45ef6fec89518d314f546fd6c3025367b721684;origin=https://example.org/a%2520b.git;path=/dir%3Bname/50%25.rs"
+        );
+
+        let parsed: QualifiedSwhid = s.parse().unwrap();
+        assert_eq!(parsed, q);
     }
 
     #[test]
