@@ -118,6 +118,36 @@ impl QualifiedSwhid {
         &self.core
     }
 
+    /// The `origin` qualifier, percent-decoded.
+    pub fn origin(&self) -> Option<&str> {
+        self.origin.as_deref()
+    }
+    /// The `visit` qualifier.
+    pub fn visit(&self) -> Option<&Swhid> {
+        self.visit.as_ref()
+    }
+    /// The `anchor` qualifier.
+    pub fn anchor(&self) -> Option<&Swhid> {
+        self.anchor.as_ref()
+    }
+    /// The `path` qualifier, percent-decoded.
+    pub fn path(&self) -> Option<&str> {
+        self.path.as_deref()
+    }
+    /// The `lines` qualifier.
+    pub fn lines(&self) -> Option<&LineRange> {
+        self.lines.as_ref()
+    }
+    /// The `bytes` qualifier.
+    pub fn bytes(&self) -> Option<&ByteRange> {
+        self.bytes.as_ref()
+    }
+    /// Qualifiers whose keys are not known to this implementation, in the
+    /// order they were parsed or pushed.
+    pub fn others(&self) -> &[(String, String)] {
+        &self.others
+    }
+
     pub fn with_origin(mut self, url: impl Into<String>) -> Self {
         self.origin = Some(url.into());
         self
@@ -888,6 +918,85 @@ mod tests {
         let formatted = q.to_string();
         let parsed: QualifiedSwhid = formatted.parse().unwrap();
         assert_eq!(q, parsed);
+    }
+
+    #[test]
+    fn qualified_swhid_accessors() {
+        let s = "swh:1:cnt:b45ef6fec89518d314f546fd6c3025367b721684\
+                 ;origin=https://example.org/repo.git\
+                 ;visit=swh:1:snp:123456789abcdef0112233445566778899aabbcc\
+                 ;anchor=swh:1:rev:123456789abcdef0112233445566778899aabbcc\
+                 ;path=/src/lib.rs\
+                 ;lines=10-20\
+                 ;bytes=100-200\
+                 ;custom=value";
+        let q: QualifiedSwhid = s.parse().unwrap();
+
+        assert_eq!(
+            q.core(),
+            &"swh:1:cnt:b45ef6fec89518d314f546fd6c3025367b721684"
+                .parse::<Swhid>()
+                .unwrap()
+        );
+        assert_eq!(q.origin(), Some("https://example.org/repo.git"));
+        assert_eq!(
+            q.visit(),
+            Some(
+                &"swh:1:snp:123456789abcdef0112233445566778899aabbcc"
+                    .parse::<Swhid>()
+                    .unwrap()
+            )
+        );
+        assert_eq!(
+            q.anchor(),
+            Some(
+                &"swh:1:rev:123456789abcdef0112233445566778899aabbcc"
+                    .parse::<Swhid>()
+                    .unwrap()
+            )
+        );
+        assert_eq!(q.path(), Some("/src/lib.rs"));
+        assert_eq!(
+            q.lines(),
+            Some(&LineRange {
+                start: 10,
+                end: Some(20)
+            })
+        );
+        assert_eq!(
+            q.bytes(),
+            Some(&ByteRange {
+                start: 100,
+                end: Some(200)
+            })
+        );
+        assert_eq!(q.others(), [("custom".to_string(), "value".to_string())]);
+    }
+
+    #[test]
+    fn qualified_swhid_accessors_percent_decode() {
+        let s = "swh:1:cnt:b45ef6fec89518d314f546fd6c3025367b721684\
+                 ;origin=https://example.org/repo.git?foo=bar%3Bbaz\
+                 ;path=/this%3Bis%C2%A0a/file";
+        let q: QualifiedSwhid = s.parse().unwrap();
+
+        assert_eq!(q.origin(), Some("https://example.org/repo.git?foo=bar;baz"));
+        assert_eq!(q.path(), Some("/this;is\u{00A0}a/file"));
+    }
+
+    #[test]
+    fn qualified_swhid_accessors_bare_core() {
+        let s = "swh:1:cnt:b45ef6fec89518d314f546fd6c3025367b721684";
+        let q: QualifiedSwhid = s.parse().unwrap();
+
+        assert_eq!(q.core().to_string(), s);
+        assert_eq!(q.origin(), None);
+        assert_eq!(q.visit(), None);
+        assert_eq!(q.anchor(), None);
+        assert_eq!(q.path(), None);
+        assert_eq!(q.lines(), None);
+        assert_eq!(q.bytes(), None);
+        assert!(q.others().is_empty());
     }
 
     #[test]
